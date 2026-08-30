@@ -8,15 +8,20 @@ env/
 venv/
 ENV/
 .venv
+*.egg-info/
+dist/
+build/
 
 # Environment variables
 .env
+.env.local
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+.vs/
 
 # Database
 *.db
@@ -25,3 +30,25 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Documentation (kept in separate docs branch/folder)
+PHASE_*.md
+*_SUMMARY.md
+*_README.md
+*_FIXES.md
+*_MIGRATION.md
+TEST_*.md
+*_NOTES.md
+
+# Keep only essential docs
+!README.md
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
