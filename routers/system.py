@@ -191,3 +191,112 @@ def get_alerts(
         return items
     finally:
         db.close()
+
+
+# ===========================================================================
+# EXPORT ENDPOINT — GET /system/export
+# Per MASTER_SPEC.md Part 5:
+#   GET /system/export?format=csv|xlsx&device_id={optional}&from={ts}&to={ts}
+#   Read-only, backed by power_readings table (Decision B).
+# ===========================================================================
+
+import csv
+import io
+from datetime import datetime
+from typing import Optional
+
+from fastapi import Query
+from fastapi.responses import StreamingResponse
+
+
+@router.get("/export")
+def export_power_readings(
+    format: str = Query("csv", description="csv or xlsx"),
+    device_id: Optional[str] = Query(None, description="Filter to one device"),
+    from_ts: Optional[datetime] = Query(None, alias="from", description="ISO-8601 start"),
+    to_ts: Optional[datetime] = Query(None, alias="to", description="ISO-8601 end"),
+    limit: int = Query(10000, le=100000),
+    config_manager=Depends(get_config_manager),
+) -> StreamingResponse:
+    """
+    Export power_readings as CSV or XLSX.
+    Per MASTER_SPEC.md Part 5 and Decision B (row-per-tick history).
+    Requires setup to be complete.
+    """
+    require_setup(config_manager)
+
+    fmt = format.lower().strip()
+    if fmt not in ("csv", "xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="format must be 'csv' or 'xlsx'.",
+        )
+
+    # Query power_readings
+    filters: list[str] = []
+    params: dict = {"limit": limit}
+
+    if device_id:
+        filters.append("device_id = :device_id")
+        params["device_id"] = device_id
+    if from_ts:
+        filters.append("timestamp >= :from_ts")
+        params["from_ts"] = from_ts
+    if to_ts:
+        filters.append("timestamp <= :to_ts")
+        params["to_ts"] = to_ts
+
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            text(
+                f"SELECT device_id, timestamp, power_watts "
+                f"FROM power_readings {where} "
+                f"ORDER BY timestamp ASC LIMIT :limit"
+            ),
+            params,
+        ).fetchall()
+    finally:
+        db.close()
+
+    columns = ["device_id", "timestamp", "power_watts"]
+
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(columns)
+        for row in rows:
+            writer.writerow([row[0], row[1].isoformat() if isinstance(row[1], datetime) else row[1], row[2]])
+        buf.seek(0)
+        return StreamingResponse(
+            iter([buf.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=power_readings.csv"},
+        )
+
+    else:  # xlsx
+        try:
+            import openpyxl
+        except ImportError:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="openpyxl not installed. Install it with: pip install openpyxl",
+            )
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "power_readings"
+        ws.append(columns)
+        for row in rows:
+            ts = row[1].isoformat() if isinstance(row[1], datetime) else str(row[1])
+            ws.append([row[0], ts, float(row[2])])
+
+        buf_bytes = io.BytesIO()
+        wb.save(buf_bytes)
+        buf_bytes.seek(0)
+        return StreamingResponse(
+            iter([buf_bytes.getvalue()]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=power_readings.xlsx"},
+        )

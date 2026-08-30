@@ -39,9 +39,15 @@ from system_config_manager import SystemConfigManager
 from tick_runner import TickRunner
 from ws_broadcaster import broadcaster
 
+from modules.power_module import PowerModule
+from modules.ev_battery_module import EvBatteryModule
+from modules.location_module import LocationModule
+from modules.device_health_module import DeviceHealthModule
+
 import routers.deps as deps
 from routers.system import router as system_router
 from routers.devices import router as devices_router
+from routers.modules_router import router as modules_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -85,10 +91,17 @@ async def lifespan(app: FastAPI):
 
     logger.info("Registered %d devices", twin.get_device_count())
 
-    # 4. Inject into routers
-    deps.set_globals(twin, config_manager, master_agent)
+    # 4. Instantiate Layer 4 application modules
+    power_module = PowerModule(twin, master_agent, SessionLocal)
+    ev_module = EvBatteryModule(twin)
+    location_module = LocationModule(config_manager, SessionLocal)
+    health_module = DeviceHealthModule(twin)
 
-    # 5. Start tick runner
+    # 5. Inject into routers
+    deps.set_globals(twin, config_manager, master_agent,
+                     power_module, ev_module, location_module, health_module)
+
+    # 6. Start tick runner
     _tick_runner = TickRunner(twin, config_manager, master_agent, broadcaster)
     _tick_runner.start()
 
@@ -129,6 +142,7 @@ app.add_middleware(
 # Mount routers under /api/v1
 app.include_router(system_router, prefix="/api/v1")
 app.include_router(devices_router, prefix="/api/v1")
+app.include_router(modules_router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
