@@ -1,33 +1,41 @@
-# RNTBCI Digital Twin - Home Energy Management System
+# RNTBCI Digital Twin — Home Energy Management System
 
-A physics-accurate digital twin for demonstrating household electrical capacity under realistic load scenarios, with focus on EV charger integration.
+A physics-accurate digital twin demonstrating household electrical capacity under realistic load scenarios, with focus on EV charger integration impact on French homes.
 
-## 🎯 Project Goal
+## 🎯 Project Overview
 
-Prove, with live and physically-correct numbers, what happens to a French home's electrical capacity when an EV charger is added under realistic household load.
+This system proves, with live and physically-correct calculations, what happens to a French home's electrical capacity when an EV charger is added under realistic household load. The digital twin simulates 9 household devices and monitors power consumption in real-time, alerting homeowners when capacity limits are approached.
 
 ## 🏗️ Architecture
 
-Five-layer architecture per MASTER_SPEC.md:
+Six-layer architecture:
 
 ```
-Layer 5 — REST API & WebSocket (Future)
-Layer 4 — Application Modules (Future)
-Layer 3 — Master Agent (Alert-Only, ✅ Implemented)
-Layer 2 — Digital Twin Core (✅ Implemented)
-Layer 1 — Device Abstraction (✅ Implemented)
-Database — PostgreSQL with Alembic migrations (✅ Implemented)
+Layer 6 — Frontend (React + Three.js)
+Layer 5 — REST API & WebSocket ✅
+Layer 4 — Application Modules ✅
+Layer 3 — Master Agent (Alert-Only) ✅
+Layer 2 — Digital Twin Core ✅
+Layer 1 — Device Abstraction ✅
+Database — PostgreSQL with Alembic migrations ✅
 ```
 
-## ✅ Current Implementation Status
+## ✅ Implementation Status
 
-- **Phase 1:** Database schema with Alembic migrations
-- **Phase 2:** Device abstraction layer with simulation adapters
-- **Phase 3:** Digital twin core (live + history stores)
-- **Phase 4:** Master Agent (alert-only overload detection)
-- **Phase 5:** REST + WebSocket API (Pending)
-- **Phase 6:** Application modules (Pending)
-- **Phase 7:** 3D Frontend (Pending)
+**Backend (Complete)**:
+- ✅ Database schema with migrations
+- ✅ Device abstraction layer (3 power behaviors)
+- ✅ Digital twin core (live + history stores)
+- ✅ Master Agent (alert-only overload detection)
+- ✅ REST API + WebSocket (17 endpoints)
+- ✅ Application modules (4 modules: location, battery, alert history, diagnostics)
+- ✅ Matter protocol envelopes (device metadata)
+- ✅ CSV/XLSX export functionality
+
+**Frontend (In Progress)**:
+- 🔄 React + Three.js 3D visualization
+- 🔄 Device control UI
+- 🔄 Power monitoring dashboard
 
 ## 🔑 Key Design Decisions
 
@@ -60,10 +68,10 @@ Flat power (7000W) until 80% SOC, then linear taper to 0W at 100% SOC. NOT a DC-
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.10+ (tested with Python 3.14)
-- PostgreSQL 14+
+- Python 3.11+ (tested with Python 3.14)
+- PostgreSQL 14+ (for production) OR use mock server (no database needed)
 
-### Setup
+### Option 1: Mock Server (Recommended for Testing)
 
 ```bash
 # Clone repository
@@ -72,7 +80,28 @@ cd RNTBCI-Digital-Twin
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+.\venv\Scripts\activate  # Linux/Mac: source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run mock server (no database required)
+python mock_server.py
+
+# Server runs at http://localhost:8000
+# API docs at http://localhost:8000/docs
+```
+
+### Option 2: Production Server (With Database)
+
+```bash
+# Clone repository
+git clone https://github.com/4ryanMishra/RNTBCI-Digital-Twin.git
+cd RNTBCI-Digital-Twin
+
+# Create virtual environment
+python -m venv venv
+.\venv\Scripts\activate  # Linux/Mac: source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -84,32 +113,27 @@ cp .env.example .env
 # Run migrations
 alembic upgrade head
 
-# Verify schema
-python verify_schema.py
+# Start server
+python api_server.py
+
+# Server runs at http://localhost:8000
+# API docs at http://localhost:8000/docs
 ```
 
 ### Run Tests
 
 ```bash
-# Phase 2: Device abstraction
-python test_phase2_quick.py
-python validate_power_math.py
+# API + WebSocket tests (use mock server)
+python test_phase5.py
 
-# Phase 3: Digital twin core
-python test_phase3.py
+# Application modules tests (use mock server)
+python test_phase6.py
 
-# Phase 4: Master Agent
-python test_phase4.py  # Requires database connection
-```
-
-### Run Demos
-
-```bash
-# Phase 2: Device simulation (no database needed)
-python phase2_demo.py
-
-# Phase 3: Digital twin with live + history stores
-python phase3_demo.py
+# All tests
+python test_phase3.py  # Digital twin core
+python test_phase4.py  # Master Agent (requires database)
+python test_phase5.py  # REST + WebSocket
+python test_phase6.py  # Application modules
 ```
 
 ## 📊 Villa Tier Presets
@@ -162,11 +186,15 @@ Verifies:
 
 ```
 ├── alembic/                    # Database migrations
-│   ├── versions/
-│   │   ├── 001_initial_schema.py
-│   │   └── 002_seed_villa_tier_presets.py
-│   ├── env.py
-│   └── script.py.mako
+├── routers/                    # API route handlers
+│   ├── devices.py             # Device control endpoints
+│   ├── system.py              # System configuration endpoints
+│   └── export.py              # CSV/XLSX export endpoints
+├── modules/                    # Application modules
+│   ├── location_module.py     # System location/setup data
+│   ├── battery_module.py      # Battery/SOC estimation
+│   ├── alert_history_module.py # Alert history tracking
+│   └── diagnostics_module.py  # System diagnostics
 ├── database.py                 # SQLAlchemy configuration
 ├── device_interface.py         # Device abstraction interface
 ├── device_registry.py          # 9 device configurations
@@ -176,15 +204,17 @@ Verifies:
 ├── digital_twin_core.py        # Core orchestrator
 ├── system_config_manager.py    # System configuration
 ├── master_agent.py             # Alert-only overload detection
-├── phase2_demo.py              # Device simulation demo
-├── phase3_demo.py              # Digital twin demo
-├── test_phase2_quick.py        # Phase 2 tests
-├── test_phase3.py              # Phase 3 tests
-├── test_phase4.py              # Phase 4 tests
-├── validate_power_math.py      # Power calculation validation
-├── verify_schema.py            # Schema verification
+├── ws_broadcaster.py           # WebSocket event broadcaster
+├── tick_runner.py              # Background simulation tick loop
+├── api_server.py               # Production FastAPI server
+├── mock_server.py              # Mock server (no database)
+├── test_phase3.py              # Digital twin tests
+├── test_phase4.py              # Master Agent tests
+├── test_phase5.py              # API + WebSocket tests
+├── test_phase6.py              # Application modules tests
 ├── requirements.txt            # Python dependencies
-└── .env.example                # Database connection template
+├── .env.example                # Database connection template
+└── DEVICE_VISUALS_MAPPING.md   # Frontend visual specifications
 ```
 
 ## 🔧 Technology Stack
@@ -194,27 +224,44 @@ Verifies:
 - **ORM/Migrations:** SQLAlchemy 2.0 + Alembic
 - **Simulation:** Custom adapters (flat, taper, duty cycle)
 
-## 📖 Documentation
+## 📖 API Documentation
 
-For detailed information, see:
-- `MASTER_SPEC.md` in `/Info` - Complete specification
-- `SYNC.md` in `/Info` - Backend/Frontend contract
-- `openapi.yaml` in `/Info` - API specification
-- Migration files in `alembic/versions/` - Schema documentation
+- **Interactive API Docs**: http://localhost:8000/docs (Swagger UI)
+- **ReDoc**: http://localhost:8000/redoc
+- **Device Visuals**: `DEVICE_VISUALS_MAPPING.md` (frontend specifications)
+
+### Key Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check + system status |
+| `/api/v1/system/setup` | POST | Initialize system (select power tier) |
+| `/api/v1/devices` | GET | List all 9 devices |
+| `/api/v1/devices/{id}/control` | POST | Control device (on/off, modes, power) |
+| `/api/v1/system/power-budget` | GET | Current power consumption + per-device breakdown |
+| `/api/v1/export/total-power` | GET | Export total power history (CSV) |
+| `/api/v1/export/appliance-power` | GET | Export per-device power (CSV) |
+| `/ws` | WebSocket | Live events (power_reading, state_change, alerts) |
 
 ## 🚧 Roadmap
 
 ### ✅ Completed
-- [x] Phase 1: Database schema
-- [x] Phase 2: Device abstraction
-- [x] Phase 3: Digital twin core
-- [x] Phase 4: Master Agent
+- [x] Database schema with migrations
+- [x] Device abstraction (3 power behaviors)
+- [x] Digital twin core (live + history)
+- [x] Master Agent (alert-only)
+- [x] REST + WebSocket API (17 endpoints)
+- [x] Application modules (4 modules)
+- [x] Matter protocol envelopes
+- [x] CSV/XLSX export
 
-### 🔜 Next Steps
-- [ ] Phase 5: REST + WebSocket API
-- [ ] Phase 6: Application modules
-- [ ] Phase 7: 3D Frontend (Three.js/React Three Fiber)
-- [ ] Phase 8: MAPPO reinforcement learning (stretch goal)
+### 🔜 In Progress
+- [ ] Frontend (React + Three.js 3D visualization)
+- [ ] Device control UI + power monitoring dashboard
+
+### 🎯 Future
+- [ ] Deployment (production VM + PostgreSQL)
+- [ ] MAPPO reinforcement learning (stretch goal)
 
 ## ⚖️ License
 

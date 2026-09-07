@@ -32,17 +32,39 @@ build/
 Thumbs.db
 desktop.ini
 
-# Documentation (kept in separate docs branch/folder)
+# Documentation (kept in .local-docs/ folder - not committed)
+.local-docs/
 PHASE_*.md
 *_SUMMARY.md
-*_README.md
 *_FIXES.md
 *_MIGRATION.md
 TEST_*.md
 *_NOTES.md
+*_COMPLETE.md
+TASKLISTT.md
+TaskList.md
+
+# Planning & handoff docs (local only)
+FRONTEND_HANDOFF.md
+HANDOVER_SUMMARY.md
+SHARE_WITH_TEAM.md
+ONBOARDING_COMPLETE.md
+PURVA_ONBOARDING.md
+SHRUTI_ONBOARDING.md
+PURVA_TASKS.md
+SHRUTI_TASKS.md
+INTEGRATION_TEST_PLAN.md
+INTEGRATION_STATUS.md
+INTEGRATION_LIVE.md
+
+# Demo scripts (not for production)
+phase*_demo.py
+validate_*.py
+verify_*.py
 
 # Keep only essential docs
 !README.md
+!DEVICE_VISUALS_MAPPING.md
 
 # Logs
 *.log
