@@ -1,0 +1,432 @@
+:root {
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+  font: 15px/1.4 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: #0b1020;
+}
+
+.app {
+  position: fixed;
+  inset: 0;
+}
+
+.app canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none;
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(12, 16, 28, 0.62);
+  backdrop-filter: blur(6px);
+  color: #e8ecf4;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+.brand {
+  font-size: 14px;
+}
+.tier-badge {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.7;
+  text-transform: capitalize;
+}
+.ws-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.ws-dot.on {
+  background: #39d353;
+  box-shadow: 0 0 8px #39d353;
+}
+.ws-dot.off {
+  background: #e5533c;
+}
+
+/* ---------- camera presets ---------- */
+.camera-presets {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+.cp-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.camera-presets button {
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(14, 18, 30, 0.72);
+  color: #dfe4ee;
+  font: 600 12px var(--sans);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.camera-presets button:hover {
+  background: rgba(40, 52, 78, 0.9);
+}
+
+/* ---------- setup modal ---------- */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 30%, #16203a, #080b16);
+  z-index: 20;
+}
+.modal {
+  width: min(560px, 92vw);
+  padding: 32px;
+  border-radius: 16px;
+  background: #121829;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  color: #e8ecf4;
+  text-align: center;
+}
+.modal h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+}
+.modal-sub {
+  margin: 0 0 22px;
+  opacity: 0.65;
+}
+.tier-grid {
+  display: grid;
+  gap: 12px;
+}
+.tier-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1a2238;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.tier-card:hover:not(:disabled) {
+  border-color: #4d8dff;
+  transform: translateY(-1px);
+}
+.tier-card:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.tier-name {
+  font-weight: 700;
+}
+.tier-detail {
+  font-size: 12px;
+  opacity: 0.6;
+}
+.modal-error {
+  margin-top: 16px;
+  color: #ff9b8a;
+  font-size: 13px;
+}
+
+/* ---------- alert banner (Decision-A stand-in for Shruti's circuit panel) ---------- */
+.alert-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 92vw;
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  z-index: 15;
+}
+.alert-banner.warning {
+  background: #b9791d;
+  animation: pulse-amber 0.5s ease-in-out 3;
+}
+.alert-banner.critical {
+  background: #c0392b;
+  animation: pulse-red 0.5s ease-in-out infinite;
+}
+.alert-hint {
+  font-weight: 400;
+  opacity: 0.9;
+}
+.alert-banner button {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+@keyframes pulse-amber {
+  50% {
+    box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.4);
+  }
+}
+@keyframes pulse-red {
+  50% {
+    box-shadow: 0 0 0 5px rgba(244, 67, 54, 0.45);
+  }
+}
+
+/* ---------- appliance index ---------- */
+.device-list {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 216px;
+  border-radius: 12px;
+  background: rgba(12, 16, 28, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  color: #e2e6ef;
+  overflow: hidden;
+}
+.dl-head {
+  display: flex;
+  align-items: center;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+.dl-head button {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+.device-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+}
+.dl-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: 500 12px var(--sans);
+  cursor: pointer;
+  text-align: left;
+}
+.dl-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.dl-row.active {
+  background: rgba(90, 130, 210, 0.22);
+}
+.dl-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid;
+  flex: none;
+}
+.dl-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dl-state {
+  opacity: 0.55;
+  font-size: 11px;
+}
+.dl-overload {
+  width: calc(100% - 12px);
+  margin: 2px 6px 8px;
+  padding: 7px;
+  border-radius: 7px;
+  border: 1px solid #b9791d;
+  background: rgba(185, 121, 29, 0.2);
+  color: #ffcf8f;
+  font: 700 11px var(--sans);
+  cursor: pointer;
+}
+.dl-fab {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 16, 28, 0.82);
+  color: #dfe4ee;
+  font: 600 12px var(--sans);
+  cursor: pointer;
+}
+
+/* ---------- device control card ---------- */
+.device-card {
+  position: absolute;
+  left: 12px;
+  bottom: 14px;
+  width: 288px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 3px solid #888;
+  background: rgba(12, 16, 28, 0.9);
+  backdrop-filter: blur(10px);
+  color: #e8ecf4;
+  overflow: hidden;
+}
+.dc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 12px 8px;
+}
+.dc-head strong {
+  display: block;
+  font-size: 13px;
+}
+.dc-room {
+  font-size: 10px;
+  opacity: 0.55;
+}
+.dc-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  align-self: center;
+}
+.dc-badge.on {
+  background: rgba(57, 211, 83, 0.2);
+  color: #7ee59a;
+}
+.dc-badge.off {
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0.7;
+}
+.dc-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+}
+.dc-power {
+  padding: 0 12px 8px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.dc-body {
+  padding: 10px 12px 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.dc-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+.dc-field > span {
+  opacity: 0.7;
+  flex: none;
+}
+.dc-control {
+  display: flex;
+  justify-content: flex-end;
+  flex: 1;
+}
+.dc-btn,
+.dc-select {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #23304c;
+  color: #e8ecf4;
+  font: 600 11px var(--sans);
+  cursor: pointer;
+}
+.dc-btn:hover {
+  background: #31436b;
+}
+.dc-btn-group {
+  display: flex;
+  gap: 4px;
+}
+.dc-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dc-slider input {
+  width: 130px;
+}
+.dc-slider-val {
+  font-size: 11px;
+  opacity: 0.75;
+  min-width: 44px;
+  text-align: right;
+}
+.dc-readout {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.dc-note {
+  margin: 2px 0 0;
+  font-size: 10px;
+  opacity: 0.5;
+  line-height: 1.4;
+}

@@ -1,0 +1,643 @@
+openapi: 3.0.3
+info:
+  title: RNTBCI Home Digital Twin API
+  description: >
+    REST API for the RNTBCI household digital twin. Exposes state and control
+    endpoints for 9 appliances modeled on Matter device types, plus a
+    system-level power budget / alert endpoint.
+
+    Household-load derating is intentionally NOT implemented (Decision A):
+    the system raises alerts on unsafe total draw but never auto-throttles
+    any device. EVSE is the only device with a device-internal power taper
+    (SOC-based, near full charge). Refrigerator uses duty-cycle power
+    behavior; all other devices report flat power while running.
+
+    Microwave Oven and Refrigerator data models were built by us for this
+    project, consistent with the Matter spec — RNTBCI did not supply specs
+    for these two devices. All other 7 device models are based on
+    specs/data provided by RNTBCI.
+  version: 1.0.0
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: evse
+  - name: light
+  - name: dishwasher
+  - name: washing-machine
+  - name: water-heater
+  - name: heat-pump
+  - name: cctv
+  - name: microwave
+  - name: refrigerator
+  - name: system
+
+paths:
+  # ---------------------------------------------------------------
+  # SYSTEM / MASTER AGENT
+  # ---------------------------------------------------------------
+  /system/power-budget:
+    get:
+      tags: [system]
+      summary: Current total household power draw and safety status
+      description: >
+        Read-only. Aggregates live power draw across all 9 devices.
+        Never triggers auto-throttle (Decision A) — only reports status
+        and, when unsafe, an alert.
+      responses:
+        "200":
+          description: Current power budget snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PowerBudget"
+
+  /system/alerts:
+    get:
+      tags: [system]
+      summary: List active system alerts
+      responses:
+        "200":
+          description: Active alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+  # ---------------------------------------------------------------
+  # EVSE
+  # ---------------------------------------------------------------
+  /devices/evse:
+    get:
+      tags: [evse]
+      summary: Get EVSE state
+      responses:
+        "200":
+          description: EVSE state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvseState"
+
+  /devices/evse/control:
+    post:
+      tags: [evse]
+      summary: Start, stop, or configure charging
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvseControl"
+      responses:
+        "200":
+          description: Updated EVSE state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvseState"
+
+  # ---------------------------------------------------------------
+  # LIGHT (OnOff Plug-in Unit)
+  # ---------------------------------------------------------------
+  /devices/light:
+    get:
+      tags: [light]
+      summary: Get light state
+      responses:
+        "200":
+          description: Light state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LightState"
+
+  /devices/light/control:
+    post:
+      tags: [light]
+      summary: Turn on/off, set level
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LightControl"
+      responses:
+        "200":
+          description: Updated light state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LightState"
+
+  # ---------------------------------------------------------------
+  # DISHWASHER
+  # ---------------------------------------------------------------
+  /devices/dishwasher:
+    get:
+      tags: [dishwasher]
+      summary: Get dishwasher state
+      responses:
+        "200":
+          description: Dishwasher state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplianceState"
+
+  /devices/dishwasher/control:
+    post:
+      tags: [dishwasher]
+      summary: Start/stop/select mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplianceControl"
+      responses:
+        "200":
+          description: Updated dishwasher state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplianceState"
+
+  # ---------------------------------------------------------------
+  # WASHING MACHINE
+  # ---------------------------------------------------------------
+  /devices/washing-machine:
+    get:
+      tags: [washing-machine]
+      summary: Get washing machine state
+      responses:
+        "200":
+          description: Washing machine state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplianceState"
+
+  /devices/washing-machine/control:
+    post:
+      tags: [washing-machine]
+      summary: Start/stop/select mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplianceControl"
+      responses:
+        "200":
+          description: Updated washing machine state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplianceState"
+
+  # ---------------------------------------------------------------
+  # WATER HEATER
+  # ---------------------------------------------------------------
+  /devices/water-heater:
+    get:
+      tags: [water-heater]
+      summary: Get water heater state
+      responses:
+        "200":
+          description: Water heater state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplianceState"
+
+  /devices/water-heater/control:
+    post:
+      tags: [water-heater]
+      summary: Set mode / target temperature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplianceControl"
+      responses:
+        "200":
+          description: Updated water heater state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplianceState"
+
+  # ---------------------------------------------------------------
+  # HEAT PUMP
+  # ---------------------------------------------------------------
+  /devices/heat-pump:
+    get:
+      tags: [heat-pump]
+      summary: Get heat pump state
+      responses:
+        "200":
+          description: Heat pump state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplianceState"
+
+  /devices/heat-pump/control:
+    post:
+      tags: [heat-pump]
+      summary: Set mode / target temperature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplianceControl"
+      responses:
+        "200":
+          description: Updated heat pump state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplianceState"
+
+  # ---------------------------------------------------------------
+  # CCTV (Camera)
+  # ---------------------------------------------------------------
+  /devices/cctv:
+    get:
+      tags: [cctv]
+      summary: Get CCTV camera state
+      responses:
+        "200":
+          description: CCTV state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CctvState"
+
+  /devices/cctv/control:
+    post:
+      tags: [cctv]
+      summary: Enable/disable streaming or recording
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CctvControl"
+      responses:
+        "200":
+          description: Updated CCTV state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CctvState"
+
+  # ---------------------------------------------------------------
+  # MICROWAVE OVEN (built by us)
+  # ---------------------------------------------------------------
+  /devices/microwave:
+    get:
+      tags: [microwave]
+      summary: Get microwave state
+      description: Data model built by us (Matter device type 0x0079) — not supplied by RNTBCI.
+      responses:
+        "200":
+          description: Microwave state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MicrowaveState"
+
+  /devices/microwave/control:
+    post:
+      tags: [microwave]
+      summary: Start cook with time/power level, or stop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MicrowaveControl"
+      responses:
+        "200":
+          description: Updated microwave state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MicrowaveState"
+
+  # ---------------------------------------------------------------
+  # REFRIGERATOR (built by us)
+  # ---------------------------------------------------------------
+  /devices/refrigerator:
+    get:
+      tags: [refrigerator]
+      summary: Get refrigerator state
+      description: >
+        Data model built by us (Matter device type 0x0070) — not supplied by
+        RNTBCI. Power draw is duty-cycle (compressor on/off pulses), not flat.
+      responses:
+        "200":
+          description: Refrigerator state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefrigeratorState"
+
+  /devices/refrigerator/control:
+    post:
+      tags: [refrigerator]
+      summary: Set mode / target temperature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefrigeratorControl"
+      responses:
+        "200":
+          description: Updated refrigerator state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefrigeratorState"
+
+components:
+  schemas:
+    # ---------------------------------------------------------------
+    # SHARED
+    # ---------------------------------------------------------------
+    PowerReading:
+      type: object
+      properties:
+        watts:
+          type: number
+          format: float
+          description: Instantaneous power draw in watts
+        timestamp:
+          type: string
+          format: date-time
+
+    OperationalState:
+      type: string
+      enum: [Stopped, Running, Paused, Error]
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+          enum: [warning, critical]
+        message:
+          type: string
+        total_draw_watts:
+          type: number
+          format: float
+        limit_watts:
+          type: number
+          format: float
+        raised_at:
+          type: string
+          format: date-time
+
+    PowerBudget:
+      type: object
+      properties:
+        total_draw_watts:
+          type: number
+          format: float
+        limit_watts:
+          type: number
+          format: float
+        status:
+          type: string
+          enum: [ok, warning, critical]
+          description: Reporting only — never triggers device-level auto-throttle (Decision A)
+        per_device:
+          type: array
+          items:
+            type: object
+            properties:
+              device_id:
+                type: string
+              watts:
+                type: number
+                format: float
+
+    # ---------------------------------------------------------------
+    # EVSE
+    # ---------------------------------------------------------------
+    EvseState:
+      type: object
+      properties:
+        device_id:
+          type: string
+        operational_state:
+          $ref: "#/components/schemas/OperationalState"
+        rated_power_watts:
+          type: number
+          format: float
+          description: Flat power level before SOC taper begins (e.g. 7000W)
+        current_power_watts:
+          type: number
+          format: float
+          description: Actual instantaneous draw — equals rated power until taper kicks in
+        state_of_charge_percent:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        is_tapering:
+          type: boolean
+          description: True once SOC taper has begun (typically last 10-20% SOC)
+        taper_start_soc_percent:
+          type: number
+          format: float
+          description: SOC threshold where tapering begins for this session
+
+    EvseControl:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [start, stop]
+        target_power_watts:
+          type: number
+          format: float
+
+    # ---------------------------------------------------------------
+    # LIGHT
+    # ---------------------------------------------------------------
+    LightState:
+      type: object
+      properties:
+        device_id:
+          type: string
+        on:
+          type: boolean
+        level:
+          type: integer
+          minimum: 0
+          maximum: 254
+          description: Matter Level Control value, if dimmable
+        power_watts:
+          type: number
+          format: float
+          description: Flat draw while on (e.g. 15W), 0 while off
+
+    LightControl:
+      type: object
+      properties:
+        on:
+          type: boolean
+        level:
+          type: integer
+          minimum: 0
+          maximum: 254
+
+    # ---------------------------------------------------------------
+    # GENERIC APPLIANCE (dishwasher, washing machine, water heater, heat pump)
+    # ---------------------------------------------------------------
+    ApplianceState:
+      type: object
+      properties:
+        device_id:
+          type: string
+        operational_state:
+          $ref: "#/components/schemas/OperationalState"
+        mode:
+          type: string
+          description: Device-specific mode (e.g. Eco, Normal, Rapid)
+        power_watts:
+          type: number
+          format: float
+          description: Flat draw while Running, 0 otherwise
+        target_temperature_celsius:
+          type: number
+          format: float
+          description: Applicable to water heater / heat pump only
+
+    ApplianceControl:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [start, stop, pause]
+        mode:
+          type: string
+        target_temperature_celsius:
+          type: number
+          format: float
+
+    # ---------------------------------------------------------------
+    # CCTV
+    # ---------------------------------------------------------------
+    CctvState:
+      type: object
+      properties:
+        device_id:
+          type: string
+        streaming:
+          type: boolean
+        recording:
+          type: boolean
+        power_watts:
+          type: number
+          format: float
+          description: Flat draw — CCTV is always-on in practice
+
+    CctvControl:
+      type: object
+      properties:
+        streaming:
+          type: boolean
+        recording:
+          type: boolean
+
+    # ---------------------------------------------------------------
+    # MICROWAVE (built by us)
+    # ---------------------------------------------------------------
+    MicrowaveState:
+      type: object
+      properties:
+        device_id:
+          type: string
+        operational_state:
+          $ref: "#/components/schemas/OperationalState"
+        mode:
+          type: string
+          description: e.g. Defrost, Reheat, Cook
+        cook_time_seconds_remaining:
+          type: integer
+        power_level_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        power_watts:
+          type: number
+          format: float
+          description: Fixed value while Running (on-full or off, no ramp)
+
+    MicrowaveControl:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [start, stop]
+        mode:
+          type: string
+        cook_time_seconds:
+          type: integer
+        power_level_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    # ---------------------------------------------------------------
+    # REFRIGERATOR (built by us, duty-cycle)
+    # ---------------------------------------------------------------
+    RefrigeratorState:
+      type: object
+      properties:
+        device_id:
+          type: string
+        mode:
+          type: string
+          description: e.g. Normal, Eco, Rapid Cool
+        compressor_on:
+          type: boolean
+          description: Toggles per duty cycle — drives power draw
+        current_temperature_celsius:
+          type: number
+          format: float
+        target_temperature_celsius:
+          type: number
+          format: float
+        power_watts:
+          type: number
+          format: float
+          description: Rated draw when compressor_on=true, ~0W when false
+        cycle_on_duration_seconds:
+          type: integer
+          description: Compressed for demo purposes; real fridges run longer cycles
+        cycle_off_duration_seconds:
+          type: integer
+        door_open:
+          type: boolean
+
+    RefrigeratorControl:
+      type: object
+      properties:
+        mode:
+          type: string
+        target_temperature_celsius:
+          type: number
+          format: float

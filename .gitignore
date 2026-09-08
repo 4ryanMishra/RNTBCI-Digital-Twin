@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node (frontend/ has its own .gitignore too)
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code session-local (keep launch.json only)
+.claude/*
+!.claude/launch.json
+
+# Unrelated coursework — remove this line if the file belongs in the repo
+ASQL Project .pdf
