@@ -6,6 +6,22 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--host", "127.0.0.1"],
       "port": 5173
+    },
+    {
+      "name": "team-integrated",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/private/tmp/claude-501/-Users-purvajain-Desktop-french-home/2ca2f08d-dce0-478e-8729-3d6f32b34705/scratchpad/RNTBCI-Digital-Twin/frontend",
+        "run",
+        "dev",
+        "--",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "5174"
+      ],
+      "port": 5174
     }
   ]
 }
