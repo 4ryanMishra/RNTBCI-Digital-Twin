@@ -1,5 +1,5 @@
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Grid } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 
 import EVSEMesh from "./devices/EVSE";
@@ -12,6 +12,9 @@ import CCTVMesh from "./devices/CCTV";
 import MicrowaveMesh from "./devices/Microwave";
 import RefrigeratorMesh from "./devices/Refrigerator";
 
+import HouseEnvironment from "./environment/HouseEnvironment";
+import CameraRig from "./environment/CameraRig";
+
 import { useWsStore } from "../../stores/wsStore";
 import type { DeviceState } from "../../types";
 
@@ -19,7 +22,7 @@ interface Props {
   onDeviceClick: (deviceId: string) => void;
 }
 
-// Zone positions — frontend's call
+// Zone positions — frontend's call. HouseEnvironment is built to fit these.
 const DEVICE_POSITIONS: Record<string, [number, number, number]> = {
   // Kitchen zone
   dishwasher_01:   [-4, 0.5, -1.5],
@@ -36,15 +39,6 @@ const DEVICE_POSITIONS: Record<string, [number, number, number]> = {
   light_01:     [-4, 1.8, 2],
 };
 
-function ZoneLabel({ position }: { position: [number, number, number] }) {
-  return (
-    <mesh position={position}>
-      <boxGeometry args={[0.01, 0.01, 0.01]} />
-      <meshStandardMaterial visible={false} />
-    </mesh>
-  );
-}
-
 export default function SceneCanvas({ onDeviceClick }: Props) {
   const deviceStates = useWsStore(s => s.deviceStates);
   const lastDutyCycle = useWsStore(s => s.lastDutyCycleToggle);
@@ -59,39 +53,25 @@ export default function SceneCanvas({ onDeviceClick }: Props) {
   return (
     <Canvas
       shadows
-      camera={{ position: [0, 8, 12], fov: 50, near: 0.1, far: 100 }}
+      camera={{ position: [0, 9, 18], fov: 50, near: 0.1, far: 200 }}
       style={{ background: "#0f1117" }}
-      gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 0.9 }}
+      gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 0.95 }}
     >
       {/* Ambient + directional light */}
-      <ambientLight intensity={0.25} />
+      <ambientLight intensity={0.28} />
       <directionalLight
-        position={[5, 10, 5]}
-        intensity={0.6}
+        position={[6, 12, 8]}
+        intensity={0.7}
         castShadow
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0004}
         color="#e8e4d0"
       />
       {/* Subtle fill from below */}
-      <pointLight position={[0, -2, 0]} intensity={0.15} color="#4d7c4d" />
+      <pointLight position={[0, -2, 0]} intensity={0.12} color="#4d7c4d" />
 
-      {/* Grid floor */}
-      <Grid
-        args={[30, 30]}
-        position={[0, -0.5, 0]}
-        cellColor="#1e2535"
-        sectionColor="#2d3a52"
-        fadeDistance={20}
-        fadeStrength={1.5}
-        cellSize={1}
-        sectionSize={3}
-      />
-
-      {/* Zone labels (invisible meshes as anchors) */}
-      <ZoneLabel position={[-4, -0.4, -1.5]} />
-      <ZoneLabel position={[4, -0.4, -1.5]} />
-      <ZoneLabel position={[0, -0.4, 3.5]} />
-      <ZoneLabel position={[-4, -0.4, 2]} />
+      {/* ── French-home environment (wraps the devices) ── */}
+      <HouseEnvironment />
 
       {/* ── Kitchen zone ── */}
       <DishwasherMesh   state={ds("dishwasher_01")}   onClick={() => onDeviceClick("dishwasher_01")}   position={DEVICE_POSITIONS.dishwasher_01} />
@@ -110,15 +90,17 @@ export default function SceneCanvas({ onDeviceClick }: Props) {
       {/* ── Living zone ── */}
       <LightMesh state={ds("light_01")} onClick={() => onDeviceClick("light_01")} position={DEVICE_POSITIONS.light_01} />
 
-      {/* Camera controls */}
+      {/* Camera controls + preset rig */}
       <OrbitControls
-        target={[0, 0, 0]}
-        minPolarAngle={Math.PI / 6}
-        maxPolarAngle={Math.PI / 2.4}
+        target={[0, 0.5, 0]}
+        minPolarAngle={Math.PI / 8}
+        maxPolarAngle={Math.PI / 2.15}
         minDistance={5}
-        maxDistance={22}
+        maxDistance={45}
         enablePan={true}
+        makeDefault
       />
+      <CameraRig />
     </Canvas>
   );
 }

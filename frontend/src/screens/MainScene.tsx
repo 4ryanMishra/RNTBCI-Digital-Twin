@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { listDevices } from "../api/client";
 import { useWsStore } from "../stores/wsStore";
 import SceneCanvas from "../components/scene/SceneCanvas";
+import SceneControls from "../components/scene/SceneControls";
 import CircuitPanelHUD from "../components/scene/CircuitPanelHUD";
 import AlertToast from "../components/scene/AlertToast";
 import DeviceHUDCard from "../components/scene/DeviceHUDCard";
@@ -63,33 +64,8 @@ export default function MainScene() {
         />
       </div>
 
-      {/* Zone labels overlay */}
-      <div style={{
-        position: "absolute",
-        bottom: "1.5rem",
-        left: "50%",
-        transform: "translateX(-50%)",
-        display: "flex",
-        gap: "2rem",
-        pointerEvents: "none",
-        zIndex: 10,
-      }}>
-        {[
-          { label: "Kitchen", color: "#4FC3F7" },
-          { label: "Utility", color: "#FF7043" },
-          { label: "Exterior", color: "#00BFFF" },
-          { label: "Living", color: "#FFF5C0" },
-        ].map(z => (
-          <div key={z.label} style={{
-            display: "flex", alignItems: "center", gap: "0.4rem",
-            fontSize: "0.65rem", color: "var(--stone-400)",
-            letterSpacing: "0.1em",
-          }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: z.color, boxShadow: `0 0 5px ${z.color}` }} />
-            {z.label.toUpperCase()}
-          </div>
-        ))}
-      </div>
+      {/* Camera presets + roof / daylight toggles (3D environment) */}
+      <SceneControls />
     </div>
   );
 }
