@@ -23,3 +23,6 @@ dist-ssr/
 
 # Unrelated coursework — remove this line if the file belongs in the repo
 ASQL Project .pdf
+
+# Git bundle for handoff — not part of the repo
+rntbci-digital-twin.bundle
