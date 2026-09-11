@@ -213,16 +213,29 @@ async def _emit_alert(severity: str, message: str,
                       total_watts: float, limit_watts: float) -> None:
     global _ALERT_ID
     _ALERT_ID += 1
+    # camelCase throughout — matches frontend types/index.ts AlertRecord shape
+    alert_type = "overload_trip" if severity == "critical" else "overload_warning"
     alert = {
         "id": str(_ALERT_ID),
         "severity": severity,
+        "alertType": alert_type,
         "message": message,
-        "total_draw_watts": round(total_watts, 1),
-        "limit_watts": round(limit_watts, 1),
-        "raised_at": _now(),
+        "totalDrawWatts": round(total_watts, 1),
+        "limitWatts": round(limit_watts, 1),
+        "raisedAt": _now(),
     }
     _ALERTS.append(alert)
-    await _broadcast({"event": "alert", "timestamp": _now(), "data": alert})
+    # WS event uses totalLoadWatts to match wsStore handler
+    await _broadcast({
+        "event": "alert",
+        "timestamp": _now(),
+        "data": {
+            "alertType": alert_type,
+            "message": message,
+            "totalLoadWatts": round(total_watts, 1),
+            "limitWatts": round(limit_watts, 1),
+        },
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -348,14 +361,14 @@ async def _simulation_loop() -> None:
             if ratio >= 0.95 and (not _ALERTS or _ALERTS[-1]["severity"] != "critical"):
                 await _emit_alert(
                     "critical",
-                    f"Household load {round(total/1000,2)} kW exceeds 95% of "
+                    f"Household load {round(total/1000,2)} kW exceeds 95 % of "
                     f"{round(limit_w/1000,2)} kW limit. Reduce load manually.",
                     total, limit_w,
                 )
             elif 0.80 <= ratio < 0.95 and (not _ALERTS or _ALERTS[-1]["severity"] == "ok"):
                 await _emit_alert(
                     "warning",
-                    f"Household load {round(total/1000,2)} kW at 80%+ of "
+                    f"Household load {round(total/1000,2)} kW at 80 %+ of "
                     f"{round(limit_w/1000,2)} kW limit.",
                     total, limit_w,
                 )
@@ -499,8 +512,8 @@ def power_budget():
 # ---------------------------------------------------------------------------
 
 @app.get("/api/v1/system/alerts")
-def get_alerts(limit: int = Query(20, le=100)):
-    _require_setup()
+def get_alerts(limit: int = Query(20, le=200)):
+    # Returns alerts newest-first, camelCase to match AlertRecord in types/index.ts
     return list(reversed(_ALERTS))[:limit]
 
 
@@ -685,13 +698,20 @@ async def control_device(device_id: str, body: ControlRequest):
     #   }
     # -----------------------------------------------------------------------
     if dtype == "evse":
-        if body.action == "start":
-            target = params.get("targetPowerWatts", d["rated_power_watts"])
+        if body.action in ("start", "set_power", "on"):
+            # Accept both frontend naming conventions:
+            #   DeviceHUDCard sends: { action: "start", parameters: { targetPowerWatts: 3500 } }
+            #   Also accept:         { action: "set_power", parameters: { chargingPowerWatts: 3500 } }
+            target = (
+                params.get("targetPowerWatts")
+                or params.get("chargingPowerWatts")
+                or d["rated_power_watts"]
+            )
             target = max(1400.0, min(7400.0, float(target)))
             d["operational_state"] = "running"
             d["current_power_watts"] = target
             d["is_charging"] = True
-        elif body.action == "stop":
+        elif body.action in ("stop", "off"):
             d["operational_state"] = "off"
             d["current_power_watts"] = 0.0
             d["is_charging"] = False
@@ -1124,6 +1144,10 @@ def ev_session():
     if power > 0 and soc < 100:
         remaining_kwh = 60.0 * (100.0 - soc) / 100.0
         minutes_to_full = round((remaining_kwh / (power / 1000.0)) * 60.0, 1)
+    # energyAddedKwh — approximate from SOC delta assuming 60 kWh battery
+    # and a default start SOC of 50 % (matches synthetic session history)
+    start_soc = 50.0
+    energy_added = round(60.0 * max(0.0, soc - start_soc) / 100.0, 2)
     return {
         "deviceId": "evse_01",
         "operationalState": evse["operational_state"],
@@ -1132,8 +1156,125 @@ def ev_session():
         "isTapering": evse["is_tapering"],
         "taperStartSocPercent": evse["taper_start_soc_percent"],
         "ratedPowerWatts": evse["rated_power_watts"],
+        "energyAddedKwh": energy_added,
         "minutesToFull": minutes_to_full,
     }
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: GET /api/v1/modules/power/history
+# Returns JSON array for the HistoryScreen chart — same rows as CSV export
+# but as JSON so recharts can consume it directly.
+#
+# Query params:
+#   device_id (optional) — filter to one device
+#   limit     (optional) — max rows, default 200
+#
+# Example response:
+#   [
+#     { "deviceId": "evse_01",  "timestamp": "2026-09-10T18:00:00Z", "watts": 7000.0 },
+#     { "deviceId": "light_01", "timestamp": "2026-09-10T18:00:00Z", "watts": 15.0  },
+#     ...
+#   ]
+# ---------------------------------------------------------------------------
+@app.get("/api/v1/modules/power/history")
+def power_history(
+    device_id: Optional[str] = Query(None),
+    limit: int = Query(200, le=2000),
+):
+    _require_setup()
+    # n_ticks = number of time steps to generate.
+    # Each tick produces one row per device (or one row if device_id filtered).
+    # Cap at 300 ticks so the response stays fast.
+    device_count = 1 if device_id else len(_DEVICES)
+    n_ticks = min(300, max(1, limit // device_count))
+    rows = _generate_history_rows(device_id=device_id, n_ticks=n_ticks)
+    return [
+        {
+            "deviceId": r["device_id"],
+            "timestamp": r["timestamp"],
+            "watts": r["power_watts"],
+        }
+        for r in rows[:limit]
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Fix 2a: GET /api/v1/modules/ev/sessions
+# Returns a list of past EV charging sessions for the EVScreen history table.
+#
+# Example response:
+#   [
+#     {
+#       "sessionId": 1,
+#       "startedAt": "2026-09-10T17:00:00Z",
+#       "endedAt":   "2026-09-10T18:12:00Z",
+#       "startSocPct": 20.0,
+#       "endSocPct":   100.0,
+#       "energyAddedKwh": 48.0,
+#       "peakPowerWatts": 7000.0,
+#       "completed": true
+#     }
+#   ]
+# ---------------------------------------------------------------------------
+
+# Synthetic session history — realistic completed sessions
+_EV_SESSIONS: List[Dict[str, Any]] = [
+    {
+        "sessionId": 1,
+        "startedAt": _ts_ago(86400 + 4320),   # yesterday evening
+        "endedAt":   _ts_ago(86400),
+        "startSocPct": 18.0,
+        "endSocPct": 100.0,
+        "energyAddedKwh": round(60.0 * (100.0 - 18.0) / 100.0, 2),
+        "peakPowerWatts": 7000.0,
+        "completed": True,
+    },
+    {
+        "sessionId": 2,
+        "startedAt": _ts_ago(3 * 86400 + 5400),
+        "endedAt":   _ts_ago(3 * 86400),
+        "startSocPct": 35.0,
+        "endSocPct": 100.0,
+        "energyAddedKwh": round(60.0 * (100.0 - 35.0) / 100.0, 2),
+        "peakPowerWatts": 7000.0,
+        "completed": True,
+    },
+    {
+        "sessionId": 3,
+        "startedAt": _ts_ago(7 * 86400 + 7200),
+        "endedAt":   _ts_ago(7 * 86400),
+        "startSocPct": 52.0,
+        "endSocPct": 100.0,
+        "energyAddedKwh": round(60.0 * (100.0 - 52.0) / 100.0, 2),
+        "peakPowerWatts": 5500.0,
+        "completed": True,
+    },
+]
+
+
+@app.get("/api/v1/modules/ev/sessions")
+def ev_sessions(limit: int = Query(20, le=100)):
+    _require_setup()
+    # If EVSE is currently charging, prepend it as an in-progress session
+    evse = _DEVICES["evse_01"]
+    result = []
+    if evse["operational_state"] == "running":
+        soc = evse["state_of_charge_percent"]
+        power = evse["current_power_watts"]
+        energy_added = round(60.0 * (soc - 50.0) / 100.0, 2)  # approximate from default 50% start
+        result.append({
+            "sessionId": 0,
+            "startedAt": _ts_ago(int((soc - 50.0) / 100.0 * 3600 * 8) if soc > 50 else 600),
+            "endedAt": None,
+            "startSocPct": 50.0,
+            "endSocPct": round(soc, 1),
+            "energyAddedKwh": max(0.0, energy_added),
+            "peakPowerWatts": evse["rated_power_watts"],
+            "completed": False,
+        })
+    result.extend(_EV_SESSIONS)
+    return result[:limit]
 
 
 @app.get("/api/v1/modules/health")
@@ -1161,6 +1302,31 @@ def health_module():
         "devices": devices,
         "timestamp": _now(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Fix 5: Export URL aliases
+# client.ts builds: GET /api/v1/system/export?format=csv&device_id=...
+# These aliases make both the original and the per-type URLs work.
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/export/total-power")
+def export_total_power(
+    format: str = Query("csv", description="csv or xlsx"),
+    limit: int = Query(500, le=10000),
+):
+    """Alias → /api/v1/system/export (all devices, no device_id filter)."""
+    return export_history(format=format, device_id=None, from_ts=None, to_ts=None, limit=limit)
+
+
+@app.get("/api/v1/export/appliance-power")
+def export_appliance_power(
+    format: str = Query("csv", description="csv or xlsx"),
+    device_id: Optional[str] = Query(None),
+    limit: int = Query(500, le=10000),
+):
+    """Alias → /api/v1/system/export filtered by device_id."""
+    return export_history(format=format, device_id=device_id, from_ts=None, to_ts=None, limit=limit)
 
 
 # ===========================================================================
