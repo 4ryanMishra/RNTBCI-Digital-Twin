@@ -15,6 +15,7 @@ import { ExtrudeGeometry, Shape } from "three";
 import { Sky } from "@react-three/drei";
 
 import { useSceneViewStore } from "./sceneViewStore";
+import type { LightingMode } from "./sceneViewStore";
 import { stuccoTexture, terracottaTexture, gravelTexture } from "./textures";
 
 // ── layout (matches SceneCanvas DEVICE_POSITIONS; grid/floor at y = -0.5) ──
@@ -233,19 +234,39 @@ function Daylight() {
   );
 }
 
-export default function HouseEnvironment() {
-  const roofVisible = useSceneViewStore((s) => s.roofVisible);
-  const daylight = useSceneViewStore((s) => s.daylight);
-  const gravel = gravelTexture();
-  const litWindows = !daylight;
+function Nighttime() {
+  return (
+    <>
+      <color attach="background" args={["#07080f"]} />
+      {/* deep navy sky */}
+      <ambientLight intensity={0.08} color="#1a2040" />
+      <hemisphereLight color="#1e2a50" groundColor="#080808" intensity={0.5} />
+      {/* cool moonlight from upper-right */}
+      <directionalLight position={[-12, 18, 10]} intensity={0.45} color="#b0c4de" castShadow />
+      {/* warm street-lamp glow near driveway */}
+      <pointLight position={[0, 3.5, 10]} color="#ffcc66" intensity={2.0} distance={14} decay={2} />
+      {/* interior warmth through windows */}
+      <pointLight position={[-2, 1.5, -1]} color="#ffaa44" intensity={1.2} distance={6} decay={2} />
+    </>
+  );
+}
 
+
+export default function HouseEnvironment() {
+  const roofVisible    = useSceneViewStore((s) => s.roofVisible);
+  const lightingMode   = useSceneViewStore((s) => s.lightingMode) as LightingMode;
+  const gravel = gravelTexture();
+
+  // Windows are lit (warm glow) in night or dark mode; dark panes during daylight
+  const litWindows = lightingMode !== "daylight";
   const wallMidY = FLOOR_Y + H.wallH / 2;
 
   return (
     <group>
-      {daylight && <Daylight />}
-      {/* warm accent + soft fill even in the dark scene, so the house reads */}
-      {!daylight && (
+      {lightingMode === "daylight" && <Daylight />}
+      {lightingMode === "night"    && <Nighttime />}
+      {/* dark mode: minimal warm fill so the house silhouette still reads */}
+      {lightingMode === "dark" && (
         <>
           <directionalLight position={[6, 9, 14]} intensity={0.75} color="#ffdca8" />
           <hemisphereLight color="#3a4a63" groundColor="#141c14" intensity={0.35} />

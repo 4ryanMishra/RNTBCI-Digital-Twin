@@ -22,21 +22,29 @@ interface Props {
   onDeviceClick: (deviceId: string) => void;
 }
 
-// Zone positions — frontend's call. HouseEnvironment is built to fit these.
+// ── Device zone positions aligned to HouseEnvironment.tsx layout ──────────
+// House: X -8→+6, Z -4→+3, FLOOR_Y = -0.5, wallH = 3.4
+// Kitchen zone: X -8→+1 (left of partition at X=1)
+// Utility zone: X +1→+6 (right of partition)
+// Exterior/front: Z > 3 (beyond front opening)
+// Car parked at [-0.3, FLOOR_Y, 9] — charging port side at X ≈ -0.9, Z ≈ 7
 const DEVICE_POSITIONS: Record<string, [number, number, number]> = {
-  // Kitchen zone
-  dishwasher_01:   [-4, 0.5, -1.5],
-  microwave_01:    [-2.5, 0.5, -1.5],
-  refrigerator_01: [-5.5, 0.7, -1.5],
-  // Utility zone
-  washing_machine_01: [3, 0.5, -1.5],
-  water_heater_01:    [4.8, 0.65, -1.5],
-  // Exterior zone
-  evse_01:      [0, 0.65, 3.5],
-  heat_pump_01: [2, 0.5, 3.5],
-  cctv_01:      [-1.8, 1.5, 3.5],
-  // Living zone
-  light_01:     [-4, 1.8, 2],
+  // Kitchen zone — against back wall (Z ≈ -3.5), counter height (y ≈ 0.5)
+  dishwasher_01:   [-5.5, 0.5, -3],
+  microwave_01:    [-3.5, 1.2, -3.2],    // microwave sits higher (on shelf)
+  refrigerator_01: [-6.5, 0.7, -2],
+
+  // Utility zone — against back wall, right side of partition
+  washing_machine_01: [2.5, 0.5, -3],
+  water_heater_01:    [4.5, 0.65, -3],
+
+  // Exterior — EVSE on left wall near garage opening (X ≈ -8, Z ≈ 3–4)
+  evse_01:      [-6.5, 1.0, 2.5],  // wall-mounted on left wall, near front
+  heat_pump_01: [8.0,  0.5, -1.5], // outdoor unit, right side of house
+  cctv_01:      [5.5,  3.2, 2.8],  // corner of house, near roof
+
+  // Living zone — light hangs from ceiling centre
+  light_01:     [-3.0, 2.8, 0.5],
 };
 
 export default function SceneCanvas({ onDeviceClick }: Props) {

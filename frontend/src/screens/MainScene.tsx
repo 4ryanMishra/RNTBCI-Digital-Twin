@@ -6,6 +6,7 @@ import SceneControls from "../components/scene/SceneControls";
 import CircuitPanelHUD from "../components/scene/CircuitPanelHUD";
 import AlertToast from "../components/scene/AlertToast";
 import DeviceHUDCard from "../components/scene/DeviceHUDCard";
+import AppliancesPanel from "../components/scene/AppliancesPanel";
 import type { DeviceListItem } from "../types";
 
 export default function MainScene() {
@@ -41,6 +42,9 @@ export default function MainScene() {
       {/* Alert toast — floats top-center */}
       <AlertToast />
 
+      {/* Appliances list panel — top-left */}
+      <AppliancesPanel />
+
       {/* Circuit panel HUD — bottom-left */}
       <div style={{
         position: "absolute",
@@ -51,7 +55,7 @@ export default function MainScene() {
         <CircuitPanelHUD />
       </div>
 
-      {/* Device HUD card — right panel */}
+      {/* Device HUD card — top-right (slides in on device click) */}
       <div style={{
         position: "absolute",
         top: "1rem",
@@ -64,7 +68,7 @@ export default function MainScene() {
         />
       </div>
 
-      {/* Camera presets + roof / daylight toggles (3D environment) */}
+      {/* Camera presets + roof / daylight / night toggles */}
       <SceneControls />
     </div>
   );
