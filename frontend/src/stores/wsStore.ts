@@ -22,6 +22,8 @@ interface WsStore {
 
   // Live readings
   latestPowerReading: WsPowerReading["data"] | null;
+  solarGenerationWatts: number;
+  netDrawWatts: number;
 
   // Per-device states (keyed by deviceId)
   deviceStates: Record<string, DeviceState>;
@@ -49,6 +51,8 @@ export const useWsStore = create<WsStore>((set) => ({
   contractedPowerKva: null,
   currentRatingA: null,
   latestPowerReading: null,
+  solarGenerationWatts: 0,
+  netDrawWatts: 0,
   deviceStates: {},
   lastAlert: null,
   lastDutyCycleToggle: null,
@@ -74,7 +78,6 @@ export const useWsStore = create<WsStore>((set) => ({
 
       case "power_reading":
         set((s) => {
-          // Merge per-device watts into deviceStates
           const deviceStates = { ...s.deviceStates };
           for (const d of event.data.perDevice) {
             if (deviceStates[d.deviceId]) {
@@ -84,7 +87,12 @@ export const useWsStore = create<WsStore>((set) => ({
               };
             }
           }
-          return { latestPowerReading: event.data, deviceStates };
+          return {
+            latestPowerReading:   event.data,
+            solarGenerationWatts: event.data.solarGenerationWatts ?? 0,
+            netDrawWatts:         event.data.netDrawWatts ?? event.data.totalDrawWatts,
+            deviceStates,
+          };
         });
         break;
 

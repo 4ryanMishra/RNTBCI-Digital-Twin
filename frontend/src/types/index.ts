@@ -15,7 +15,10 @@ export interface SystemSetupResponse {
 
 export interface PowerBudget {
   totalDrawWatts: number;
+  solarGenerationWatts: number;
+  netDrawWatts: number;
   limitWatts: number;
+  utilisationPct: number;
   status: string;
   perDevice: Array<{ deviceId: string; watts: number }>;
 }
@@ -46,6 +49,8 @@ export interface MatterEnvelope {
 
 export interface PowerSummary {
   totalWatts: number;
+  solarGenerationWatts: number;
+  netWatts: number;
   limitWatts: number;
   budgetStatus: string;
   utilisationPct: number;
@@ -143,6 +148,8 @@ export interface WsPowerReading {
   type: "power_reading";
   data: {
     totalDrawWatts: number;
+    solarGenerationWatts: number;
+    netDrawWatts: number;
     limitWatts: number;
     status: string;
     perDevice: Array<{ deviceId: string; watts: number }>;

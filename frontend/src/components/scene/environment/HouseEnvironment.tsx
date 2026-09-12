@@ -16,7 +16,7 @@ import { Sky } from "@react-three/drei";
 
 import { useSceneViewStore } from "./sceneViewStore";
 import type { LightingMode } from "./sceneViewStore";
-import { stuccoTexture, terracottaTexture, gravelTexture } from "./textures";
+import { stuccoTexture, terracottaTexture, gravelTexture, solarPanelTexture } from "./textures";
 
 // ── layout (matches SceneCanvas DEVICE_POSITIONS; grid/floor at y = -0.5) ──
 const FLOOR_Y = -0.5;
@@ -234,6 +234,118 @@ function Daylight() {
   );
 }
 
+/**
+ * SolarPanelArray — roof-mounted PV panels.
+ *
+ * Geometry notes:
+ *  - House roof is a gable: ridge runs along X axis, pitched toward +Z and -Z.
+ *  - Roof rise = ROOF_RISE (1.7 m), eave = EAVE (0.6 m)
+ *  - House X: minX (-8) → maxX (6), centre cx = -1
+ *  - Panels sit on the south-facing slope (+Z side of ridge) and are tilted to
+ *    match the roof pitch angle: atan(ROOF_RISE / half_depth)
+ *  - Array origin: slightly above the roof surface, centred on the south slope
+ *  - Mounting rails are low-profile aluminium-grey bars at array edges
+ *
+ * Decision A: no emissive / alert-driven material here.
+ *   The subtle specular glint on the panel material responds to the existing
+ *   scene lights (meshPhysicalMaterial roughness/metalness) — it is NOT an
+ *   emissive effect and does NOT react to alert state.
+ *
+ * The whole group is rendered only when roofVisible = true so the array hides
+ * correctly in Dollhouse / Hide-roof view.
+ */
+function SolarPanelArray({ lightingMode }: { lightingMode: LightingMode }) {
+  const tex = solarPanelTexture();
+
+  // Roof geometry constants (must match Roof() above)
+  const cx  = (H.minX + H.maxX) / 2;   // -1
+  const cz  = (H.backZ + H.frontZ) / 2; // -0.5
+  const halfDepth = (H.frontZ - H.backZ) / 2 + EAVE; // 3.5 + 0.6 = 4.1
+  // Pitch angle of the south-facing slope (panels tilt inward to follow it)
+  const pitchAngle = Math.atan2(ROOF_RISE, halfDepth); // ≈ 22.5°
+
+  // Array dimensions on the slope surface
+  const PANEL_W  = 1.0;   // width of one panel module (along X = ridge direction)
+  const PANEL_H  = 1.6;   // height of one panel module (down the slope)
+  const GAP      = 0.06;
+  const COLS     = 5;
+  const ROWS     = 2;
+  const ARRAY_W  = COLS * (PANEL_W + GAP) - GAP;
+  const ARRAY_H  = ROWS * (PANEL_H + GAP) - GAP;
+
+  // South-slope origin in roof-local space (top of south slope at ridge)
+  // In world space the ridge is at (cx, FLOOR_Y + H.wallH + ROOF_RISE, cz)
+  const ridgeY  = FLOOR_Y + H.wallH + ROOF_RISE;
+  // Place array 1/3 of the way down the south slope from the ridge
+  const slopeFrac = 0.35;
+  const slopeOffset = halfDepth * slopeFrac; // along Z (outward)
+  const heightDrop  = ROOF_RISE  * slopeFrac; // Y drop from ridge
+
+  // Array centre world position (before pitch rotation)
+  const arrX  = cx;
+  const arrY  = ridgeY - heightDrop + 0.06; // sit 6 cm above roof surface
+  const arrZ  = cz + slopeOffset;
+
+  // Daylight-reactive sheen: more metalness at midday, less at night/dark
+  const metalness = lightingMode === "daylight" ? 0.45 : lightingMode === "night" ? 0.15 : 0.3;
+  const roughness = lightingMode === "daylight" ? 0.25 : 0.45;
+
+  return (
+    <group
+      position={[arrX, arrY, arrZ]}
+      rotation={[-pitchAngle, 0, 0]}  // tilt to match south roof slope
+    >
+      {/* ── Panel modules ── */}
+      {Array.from({ length: ROWS }).map((_, row) =>
+        Array.from({ length: COLS }).map((_, col) => {
+          const px = (col - (COLS - 1) / 2) * (PANEL_W + GAP);
+          const py = -(row * (PANEL_H + GAP));
+          return (
+            <mesh
+              key={`${row}-${col}`}
+              position={[px, py, 0.01]}
+              castShadow
+              receiveShadow
+            >
+              <planeGeometry args={[PANEL_W, PANEL_H]} />
+              {/* meshPhysicalMaterial: clearcoat gives the gloss without emissive */}
+              <meshPhysicalMaterial
+                map={tex}
+                roughness={roughness}
+                metalness={metalness}
+                clearcoat={0.6}
+                clearcoatRoughness={lightingMode === "daylight" ? 0.1 : 0.4}
+                color="#0d1830"
+              />
+            </mesh>
+          );
+        })
+      )}
+
+      {/* ── Mounting rails (horizontal bars at top and bottom of array) ── */}
+      {[PANEL_H * 0.1, -(ARRAY_H - PANEL_H * 0.1)].map((ry, i) => (
+        <mesh key={`rail-h-${i}`} position={[0, ry, -0.015]} castShadow>
+          <boxGeometry args={[ARRAY_W + 0.18, 0.045, 0.06]} />
+          <meshStandardMaterial color="#8a9099" metalness={0.7} roughness={0.35} />
+        </mesh>
+      ))}
+      {/* Vertical side rails */}
+      {[-(ARRAY_W / 2 + 0.05), ARRAY_W / 2 + 0.05].map((rx, i) => (
+        <mesh key={`rail-v-${i}`} position={[rx, -ARRAY_H / 2 + PANEL_H * 0.1, -0.015]} castShadow>
+          <boxGeometry args={[0.045, ARRAY_H + 0.1, 0.06]} />
+          <meshStandardMaterial color="#8a9099" metalness={0.7} roughness={0.35} />
+        </mesh>
+      ))}
+
+      {/* ── Mid-rail between rows ── */}
+      <mesh position={[0, -(ROWS === 2 ? (PANEL_H + GAP / 2) : ARRAY_H / 2), -0.015]}>
+        <boxGeometry args={[ARRAY_W + 0.18, 0.04, 0.06]} />
+        <meshStandardMaterial color="#8a9099" metalness={0.7} roughness={0.35} />
+      </mesh>
+    </group>
+  );
+}
+
 function Nighttime() {
   return (
     <>
@@ -327,6 +439,8 @@ export default function HouseEnvironment() {
 
       {/* ---------- roof ---------- */}
       {roofVisible && <Roof />}
+      {/* Solar panel array — on the south-facing slope, hidden with roof */}
+      {roofVisible && <SolarPanelArray lightingMode={lightingMode} />}
 
       {/* ---------- exterior planting ---------- */}
       <Cypress position={[-10, 0, 4]} h={4.5} />

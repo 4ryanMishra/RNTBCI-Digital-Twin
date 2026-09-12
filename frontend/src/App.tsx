@@ -7,13 +7,15 @@ import IntroScreen from "./screens/IntroScreen";
 import HeroScreen from "./screens/HeroScreen";
 import SetupModal from "./screens/SetupModal";
 import MainScene from "./screens/MainScene";
+import DeviceCentreScreen from "./screens/DeviceCentreScreen";
+import PowerTrackerScreen from "./screens/PowerTrackerScreen";
 import HistoryScreen from "./screens/HistoryScreen";
 import EVScreen from "./screens/EVScreen";
 import HealthScreen from "./screens/HealthScreen";
 import AppShell from "./components/layout/AppShell";
 
 type AppView = "hero" | "app";
-type Screen = "scene" | "history" | "ev" | "health";
+type Screen = "scene" | "devices" | "power" | "history" | "ev" | "health";
 
 export default function App() {
   // Start single multiplexed WS connection
@@ -98,10 +100,12 @@ export default function App() {
             connected={connected}
           />
           <main style={{ flex: 1, height: "100%", position: "relative", overflow: "hidden" }}>
-            {activeScreen === "scene" && <MainScene />}
+            {activeScreen === "scene"   && <MainScene />}
+            {activeScreen === "devices" && <DeviceCentreScreen />}
+            {activeScreen === "power"   && <PowerTrackerScreen />}
             {activeScreen === "history" && <HistoryScreen />}
-            {activeScreen === "ev" && <EVScreen />}
-            {activeScreen === "health" && <HealthScreen />}
+            {activeScreen === "ev"      && <EVScreen />}
+            {activeScreen === "health"  && <HealthScreen />}
           </main>
         </div>
       )}

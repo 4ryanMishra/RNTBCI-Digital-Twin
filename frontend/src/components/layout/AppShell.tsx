@@ -1,4 +1,4 @@
-type Screen = "scene" | "history" | "ev" | "health";
+type Screen = "scene" | "devices" | "power" | "history" | "ev" | "health";
 
 interface Props {
   activeScreen: Screen;
@@ -8,10 +8,12 @@ interface Props {
 }
 
 const NAV_ITEMS: { id: Screen; label: string; icon: string }[] = [
-  { id: "scene",   label: "3D Scene",  icon: "⬡" },
-  { id: "history", label: "History",   icon: "📈" },
-  { id: "ev",      label: "EV Session", icon: "🔌" },
-  { id: "health",  label: "Health",    icon: "♥" },
+  { id: "scene",   label: "3D Scene",       icon: "⬡"  },
+  { id: "devices", label: "Device Centre",   icon: "🔌" },
+  { id: "power",   label: "Power Tracker",   icon: "⚡" },
+  { id: "history", label: "History",         icon: "📈" },
+  { id: "ev",      label: "EV Session",      icon: "🚗" },
+  { id: "health",  label: "Health",          icon: "♥"  },
 ];
 
 export default function AppShell({

@@ -140,6 +140,16 @@ _DEVICES: Dict[str, Dict[str, Any]] = {
         "cycle_off_duration_seconds": 300,
         "door_open": False,
     },
+    "solar_panel_01": {
+        "device_id": "solar_panel_01",
+        "device_type": "solar_panel",
+        "operational_state": "running",   # panels default active
+        "rated_peak_watts": 3000.0,
+        "sunrise_h": 6.0,
+        "sunset_h": 20.0,
+        "generation_watts": 0.0,          # updated every tick by _solar_generation()
+        "power_watts": 0.0,               # kept as negative for summing convenience
+    },
 }
 
 # Rated powers used when turning devices on (W)
@@ -154,6 +164,38 @@ _RATED_POWER: Dict[str, float] = {
     "refrigerator_01":   150.0,
     "evse_01":          7000.0,
 }
+
+
+def _solar_generation() -> float:
+    """
+    Current solar generation in watts (positive number).
+    Sinusoidal curve between sunrise_h and sunset_h, peaked at solar noon.
+    Returns 0 if panels are off or outside daylight window.
+    Same curve as SolarPanelDevice in simulation_adapter.py.
+    """
+    solar = _DEVICES.get("solar_panel_01", {})
+    if solar.get("operational_state") != "running":
+        return 0.0
+    sunrise_h = solar.get("sunrise_h", 6.0)
+    sunset_h  = solar.get("sunset_h", 20.0)
+    peak      = solar.get("rated_peak_watts", 3000.0)
+    now = datetime.now(timezone.utc)
+    h = now.hour + now.minute / 60.0 + now.second / 3600.0
+    if h < sunrise_h or h > sunset_h:
+        return 0.0
+    day_len = sunset_h - sunrise_h
+    phase   = math.pi * (h - sunrise_h) / day_len
+    return round(peak * math.pow(math.sin(phase), 1.2), 1)
+
+
+def _net_draw(gross_watts: float) -> float:
+    """
+    NET household draw = gross device load − solar generation, floored at 0.
+    This is the figure used for kVA-limit comparisons and alert thresholds.
+    Decision A: alert-only; this function only computes — never acts.
+    """
+    gen = _solar_generation()
+    return max(0.0, gross_watts - gen)
 
 # System config (villa tier)
 _SYSTEM_CONFIG: Dict[str, Any] = {
@@ -322,15 +364,28 @@ async def _simulation_loop() -> None:
                     },
                 })
 
+        # --- Update solar generation every tick ---
+        solar = _DEVICES.get("solar_panel_01")
+        if solar:
+            gen = _solar_generation()
+            solar["generation_watts"] = gen
+            solar["power_watts"] = -gen  # negative = generation
+
         # --- power_reading every 2 ticks ---
         if tick % 2 == 0 and _SYSTEM_CONFIG["configured"]:
-            total = sum(
+            # Gross draw: sum of all consumer devices (excludes solar)
+            gross = sum(
                 d.get("power_watts", d.get("current_power_watts", 0.0))
-                for d in _DEVICES.values()
+                for did, d in _DEVICES.items()
+                if d.get("device_type") != "solar_panel"
             )
+            gen_w = _solar_generation()
+            # NET draw is what we compare against the kVA limit (Decision A)
+            net   = max(0.0, gross - gen_w)
+
             limit_kva = _SYSTEM_CONFIG["contracted_power_kva"] or 9.2
-            limit_w = limit_kva * 1000.0
-            ratio = total / limit_w
+            limit_w   = limit_kva * 1000.0
+            ratio = net / limit_w   # alerts key off NET, not gross
 
             bstatus = "ok"
             if ratio >= 0.95:
@@ -342,9 +397,11 @@ async def _simulation_loop() -> None:
                 "event": "power_reading",
                 "timestamp": _now(),
                 "data": {
-                    "totalDrawWatts": round(total, 1),
-                    "limitWatts": round(limit_w, 1),
-                    "status": bstatus,
+                    "totalDrawWatts":       round(gross, 1),
+                    "solarGenerationWatts": round(gen_w, 1),
+                    "netDrawWatts":         round(net,   1),
+                    "limitWatts":           round(limit_w, 1),
+                    "status":               bstatus,
                     "perDevice": [
                         {
                             "deviceId": did,
@@ -357,20 +414,20 @@ async def _simulation_loop() -> None:
                 },
             })
 
-            # Alert thresholds (Decision A: alert-only, no throttle)
+            # Alert thresholds compare against NET draw (Decision A: alert-only)
             if ratio >= 0.95 and (not _ALERTS or _ALERTS[-1]["severity"] != "critical"):
                 await _emit_alert(
                     "critical",
-                    f"Household load {round(total/1000,2)} kW exceeds 95 % of "
+                    f"Household net load {round(net/1000,2)} kW exceeds 95 % of "
                     f"{round(limit_w/1000,2)} kW limit. Reduce load manually.",
-                    total, limit_w,
+                    net, limit_w,
                 )
             elif 0.80 <= ratio < 0.95 and (not _ALERTS or _ALERTS[-1]["severity"] == "ok"):
                 await _emit_alert(
                     "warning",
-                    f"Household load {round(total/1000,2)} kW at 80 %+ of "
+                    f"Household net load {round(net/1000,2)} kW at 80 %+ of "
                     f"{round(limit_w/1000,2)} kW limit.",
-                    total, limit_w,
+                    net, limit_w,
                 )
 
 
@@ -471,19 +528,24 @@ async def setup_system(body: SetupRequest):
 @app.get("/api/v1/system/power-budget")
 def power_budget():
     _require_setup()
-    total = sum(
+    gross = sum(
         d.get("power_watts", d.get("current_power_watts", 0.0))
-        for d in _DEVICES.values()
+        for did, d in _DEVICES.items()
+        if d.get("device_type") != "solar_panel"
     )
+    gen_w = _solar_generation()
+    net   = max(0.0, gross - gen_w)
     limit_kva = _SYSTEM_CONFIG["contracted_power_kva"]
     limit_w = limit_kva * 1000.0
-    ratio = total / limit_w if limit_w else 0
+    ratio = net / limit_w if limit_w else 0
     bstatus = "critical" if ratio >= 0.95 else "warning" if ratio >= 0.80 else "ok"
     return {
-        "totalDrawWatts": round(total, 1),
-        "limitWatts": round(limit_w, 1),
-        "status": bstatus,
-        "utilisationPct": round(ratio * 100, 1),
+        "totalDrawWatts":       round(gross, 1),
+        "solarGenerationWatts": round(gen_w, 1),
+        "netDrawWatts":         round(net, 1),
+        "limitWatts":           round(limit_w, 1),
+        "status":               bstatus,
+        "utilisationPct":       round(ratio * 100, 1),
         "perDevice": [
             {
                 "deviceId": did,
@@ -903,6 +965,26 @@ async def control_device(device_id: str, body: ControlRequest):
             raise HTTPException(400, f"Microwave: unknown action '{body.action}'. Valid: start, stop")
 
     # -----------------------------------------------------------------------
+    # SOLAR PANEL
+    # -----------------------------------------------------------------------
+    # ► Toggle on (panels generating):
+    #   { "action": "start" }
+    # ► Toggle off (demo — panels not generating):
+    #   { "action": "stop" }
+    # NOTE: generation amount is time-driven; on/off is for demo control only.
+    # Decision A: no auto-throttle — this is just a toggle for demo purposes.
+    # -----------------------------------------------------------------------
+    elif dtype == "solar_panel":
+        if body.action in ("start", "on"):
+            d["operational_state"] = "running"
+        elif body.action in ("stop", "off"):
+            d["operational_state"] = "off"
+            d["generation_watts"] = 0.0
+            d["power_watts"] = 0.0
+        else:
+            raise HTTPException(400, f"Solar panel: unknown action '{body.action}'. Valid: start, stop")
+
+    # -----------------------------------------------------------------------
     # REFRIGERATOR
     # -----------------------------------------------------------------------
     # NOTE: the fridge is always-on. These commands adjust mode/temp only.
@@ -1112,20 +1194,26 @@ def location():
 @app.get("/api/v1/modules/power/summary")
 def power_summary():
     _require_setup()
-    total = sum(
-        d.get("power_watts", d.get("current_power_watts", 0.0)) for d in _DEVICES.values()
+    gross = sum(
+        d.get("power_watts", d.get("current_power_watts", 0.0))
+        for did, d in _DEVICES.items()
+        if d.get("device_type") != "solar_panel"
     )
+    gen_w = _solar_generation()
+    net   = max(0.0, gross - gen_w)
     limit_w = (_SYSTEM_CONFIG["contracted_power_kva"] or 9.2) * 1000.0
-    ratio = total / limit_w if limit_w else 0
+    ratio = net / limit_w if limit_w else 0
     return {
-        "totalWatts": round(total, 1),
-        "limitWatts": round(limit_w, 1),
-        "budgetStatus": "critical" if ratio >= 0.95 else "warning" if ratio >= 0.80 else "ok",
+        "totalWatts":           round(gross, 1),
+        "solarGenerationWatts": round(gen_w, 1),
+        "netWatts":             round(net, 1),
+        "limitWatts":           round(limit_w, 1),
+        "budgetStatus":  "critical" if ratio >= 0.95 else "warning" if ratio >= 0.80 else "ok",
         "utilisationPct": round(ratio * 100, 1),
         "perDevice": [
             {
-                "deviceId": did,
-                "deviceType": d["device_type"],
+                "deviceId":         did,
+                "deviceType":       d["device_type"],
                 "operationalState": d["operational_state"],
                 "powerWatts": round(d.get("power_watts", d.get("current_power_watts", 0.0)), 1),
             }
@@ -1452,6 +1540,12 @@ def _matter_envelope(d: Dict[str, Any]) -> Dict[str, Any]:
         clusters["CameraAvStreamManagement"] = {"attributes": {
             "StreamingEnabled": d.get("streaming", True),
             "RecordingEnabled": d.get("recording", True),
+        }}
+    elif dtype == "solar_panel":
+        clusters["SolarPanelGeneration"] = {"attributes": {
+            "GenerationWatts":   d.get("generation_watts", 0.0),
+            "RatedPeakWatts":    d.get("rated_peak_watts", 3000.0),
+            "IsGenerating":      d.get("generation_watts", 0.0) > 0,
         }}
 
     meta: Dict[str, Any] = {

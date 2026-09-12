@@ -90,11 +90,22 @@ DEVICE_REGISTRY: List[Dict[str, Any]] = [
         "rated_power_config": {
             "on_power_watts": 150.0,
             "idle_power_watts": 5.0,
-            "cycle_on_s": 600.0,   # Real-world timing (source of truth)
-            "cycle_off_s": 300.0,  # Real-world timing (source of truth)
-            "simulation_compression": 10.0  # For demo: 60s on, 30s off
+            "cycle_on_s": 600.0,
+            "cycle_off_s": 300.0,
+            "simulation_compression": 10.0
         },
         "notes": "Duty cycle behavior. Schema ours, wattage RNTBCI's"
+    },
+    {
+        "device_id": "solar_panel_01",
+        "device_type": "solar_panel",
+        "power_behavior_type": "generation",
+        "rated_power_config": {
+            "rated_peak_watts": 3000.0,   # 3 kWp — typical 10-panel residential array
+            "sunrise_h": 6.0,
+            "sunset_h": 20.0
+        },
+        "notes": "Roof-mounted PV array. get_power_draw() returns negative (generation subtracts from draw). Net alert thresholds key off total_draw - solar_generation."
     }
 ]
 

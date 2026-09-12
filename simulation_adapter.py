@@ -236,6 +236,88 @@ class DutyCycleDevice(DeviceInterface):
                 self.time_in_current_phase = 0.0
 
 
+class SolarPanelDevice(DeviceInterface):
+    """
+    Generation behavior for roof-mounted solar panels.
+
+    Unlike every other device, get_power_draw() returns a NEGATIVE value when
+    generating so callers that sum load can simply add it and get net draw.
+    The sign convention is enforced here once so nothing upstream needs special
+    casing.
+
+    Generation curve: sinusoidal ramp keyed to wall-clock hour (UTC).
+    - Before sunrise (< 6 h) or after sunset (> 20 h): 0 W
+    - Peak at solar noon (13 h): rated_peak_watts
+    - Gentle ramp in between:  P = peak * sin(π * (h - 6) / 14)^1.2
+
+    The panel can be toggled off for demo purposes (action "stop" / "start").
+    When off: generation = 0 regardless of time.
+    """
+
+    def __init__(self, device_id: str, device_type: str, rated_power_config: Dict[str, Any]):
+        super().__init__(device_id, device_type, rated_power_config)
+        self.rated_peak_watts: float = rated_power_config["rated_peak_watts"]
+        self.sunrise_h: float = rated_power_config.get("sunrise_h", 6.0)
+        self.sunset_h: float = rated_power_config.get("sunset_h", 20.0)
+        self.operational_state = "running"   # panels default to active
+
+    # ── helpers ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _hour_utc() -> float:
+        """Current UTC hour as a float (e.g. 13.5 = 13:30 UTC)."""
+        import datetime as _dt
+        now = _dt.datetime.utcnow()
+        return now.hour + now.minute / 60.0 + now.second / 3600.0
+
+    def _generation_watts(self) -> float:
+        """
+        Raw generation at this moment (positive number, W).
+        Returns 0 when off or outside daylight window.
+        """
+        if self.operational_state != "running":
+            return 0.0
+        import math
+        h = self._hour_utc()
+        if h < self.sunrise_h or h > self.sunset_h:
+            return 0.0
+        day_len = self.sunset_h - self.sunrise_h          # e.g. 14 h
+        phase   = math.pi * (h - self.sunrise_h) / day_len
+        factor  = math.pow(math.sin(phase), 1.2)          # gentle S-curve
+        return round(self.rated_peak_watts * factor, 1)
+
+    # ── DeviceInterface ────────────────────────────────────────────────
+
+    def get_state(self) -> DeviceState:
+        gen = self._generation_watts()
+        return DeviceState(
+            device_id=self.device_id,
+            device_type=self.device_type,
+            operational_state=self.operational_state,
+            power_watts=-gen,          # negative = generation (subtracts from draw)
+            metadata={
+                "generation_watts": gen,
+                "rated_peak_watts":  self.rated_peak_watts,
+                "is_generating":     gen > 0,
+            }
+        )
+
+    def get_power_draw(self) -> float:
+        """Returns negative value when generating (convention: draw = load - gen)."""
+        return -self._generation_watts()
+
+    def apply_command(self, command: Dict[str, Any]) -> DeviceState:
+        action = command.get("action", "")
+        if action in ("start", "on"):
+            self.operational_state = "running"
+        elif action in ("stop", "off"):
+            self.operational_state = "off"
+        return self.get_state()
+
+    def tick(self, delta_seconds: float) -> None:
+        pass   # generation is purely time-based; no internal state to advance
+
+
 # Factory function to create appropriate device based on power_behavior_type
 def create_simulated_device(
     device_id: str,
@@ -252,5 +334,7 @@ def create_simulated_device(
         return TaperDevice(device_id, device_type, rated_power_config)
     elif power_behavior_type == "duty_cycle":
         return DutyCycleDevice(device_id, device_type, rated_power_config)
+    elif power_behavior_type == "generation":
+        return SolarPanelDevice(device_id, device_type, rated_power_config)
     else:
         raise ValueError(f"Unknown power_behavior_type: {power_behavior_type}")
