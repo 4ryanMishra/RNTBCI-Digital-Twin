@@ -15,7 +15,8 @@ export type DeviceType =
   | 'heat_pump'
   | 'cctv'
   | 'microwave'
-  | 'refrigerator';
+  | 'refrigerator'
+  | 'solar_panel';
 
 /** Raw operational_state strings the mock server emits. */
 export type OperationalState = 'off' | 'on' | 'running' | 'idle' | 'fault';
@@ -37,6 +38,7 @@ export interface DeviceState {
   streaming?: boolean; // cctv
   recording?: boolean; // cctv
   cookTimeSecondsRemaining?: number; // microwave
+  generationWatts?: number; // solar_panel — instantaneous PV output
 }
 
 export interface SystemAlert {
@@ -50,6 +52,9 @@ export interface SystemAlert {
 
 export interface PowerReading {
   totalDrawWatts: number;
+  /** Present once the backend has solar PV support; absent on older mocks. */
+  solarGenerationWatts?: number;
+  netDrawWatts?: number;
   limitWatts: number;
   status: 'ok' | 'warning' | 'critical';
   perDevice: { deviceId: string; watts: number }[];

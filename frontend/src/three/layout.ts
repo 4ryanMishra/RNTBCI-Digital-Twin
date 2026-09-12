@@ -20,6 +20,18 @@ export const HOUSE = {
   rightX: 7.5,
 } as const;
 
+/** Roof geometry shared with House.tsx so the solar array sits flush on the slope. */
+export const ROOF = {
+  eaveOverhangZ: 0.55,
+  eaveOverhangX: 0.45,
+} as const;
+
+/** Pitch of the front/back roof slopes, from ridge to eave. */
+export const ROOF_SLOPE_ANGLE = Math.atan2(
+  HOUSE.roofRidgeHeight,
+  HOUSE.depth / 2 + ROOF.eaveOverhangZ,
+);
+
 export const GARAGE = {
   // Right-hand third of the ground floor is the garage.
   minX: 3.5,
@@ -80,6 +92,7 @@ export const DEVICE_PLACEMENTS: DevicePlacement[] = [
   { id: 'cctv_01', type: 'cctv', label: 'Security Camera', position: [-7.1, 5.3, 4.7], room: 'Outside (front corner)', alwaysOn: true },
   { id: 'microwave_01', type: 'microwave', label: 'Microwave', position: [-2.4, 1.35, -4.5], room: 'Kitchen', alwaysOn: false },
   { id: 'refrigerator_01', type: 'refrigerator', label: 'Refrigerator', position: [-6.8, 1.0, -1.1], room: 'Kitchen', alwaysOn: true },
+  { id: 'solar_panel_01', type: 'solar_panel', label: 'Solar Array', position: [-4, 7.2, 3.0], room: 'Roof (front slope)', alwaysOn: true },
 ];
 
 export const DEVICE_PLACEMENT_BY_ID: Record<string, DevicePlacement> = Object.fromEntries(
@@ -102,6 +115,7 @@ export const GLOW_COLORS: Record<DeviceType, string> = {
   cctv: '#B0BEC5',
   microwave: '#CE93D8',
   refrigerator: '#80CBC4',
+  solar_panel: '#2F6FE0',
 };
 
 export const EVSE_TAPER_COLOR = '#FFD700';

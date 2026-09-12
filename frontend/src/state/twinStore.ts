@@ -16,7 +16,7 @@ import type {
   TimeOfDay,
 } from '../types';
 
-/** Seed models for all 9 devices — matches mock_server rated powers / positions. */
+/** Seed models for all 10 devices — matches device_registry.py. */
 const SEED_DEVICES: DeviceType[] = [
   'evse',
   'light',
@@ -27,10 +27,11 @@ const SEED_DEVICES: DeviceType[] = [
   'cctv',
   'microwave',
   'refrigerator',
+  'solar_panel',
 ];
 
 function seedDevice(type: DeviceType): DeviceState {
-  const alwaysOn = type === 'cctv' || type === 'refrigerator';
+  const alwaysOn = type === 'cctv' || type === 'refrigerator' || type === 'solar_panel';
   return {
     deviceId: `${type}_01`,
     deviceType: type,
@@ -40,6 +41,7 @@ function seedDevice(type: DeviceType): DeviceState {
     ...(type === 'refrigerator' ? { compressorOn: true } : {}),
     ...(type === 'evse' ? { socPercent: 62, isTapering: false, ratedPowerWatts: 7000 } : {}),
     ...(type === 'light' ? { level: 254 } : {}),
+    ...(type === 'solar_panel' ? { generationWatts: 0 } : {}),
   };
 }
 

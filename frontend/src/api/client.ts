@@ -68,6 +68,9 @@ export interface PowerSummaryEntry {
 
 export async function getPowerSummary(): Promise<{
   totalWatts: number;
+  /** Present once the backend has solar PV support (device_registry.py: solar_panel_01). */
+  solarGenerationWatts?: number;
+  netWatts?: number;
   limitWatts: number;
   budgetStatus: string;
   perDevice: PowerSummaryEntry[];

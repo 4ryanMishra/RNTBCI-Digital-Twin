@@ -17,7 +17,7 @@ import { useMemo } from 'react';
 import { ExtrudeGeometry, Shape } from 'three';
 
 import { useTwinStore } from '../../state/twinStore';
-import { GARAGE, HOUSE } from '../layout';
+import { GARAGE, HOUSE, ROOF } from '../layout';
 import { stoneTexture, stuccoTexture, terracottaTexture } from '../textures';
 
 const COLORS = {
@@ -39,7 +39,7 @@ const COLORS = {
 
 const WALL_TOP = HOUSE.floorHeight * HOUSE.floors; // 6
 const RISE = HOUSE.roofRidgeHeight;
-const EAVE_Z = HOUSE.depth / 2 + 0.55; // eave overhang
+const EAVE_Z = HOUSE.depth / 2 + ROOF.eaveOverhangZ;
 
 /* ------------------------------------------------------------------ window -- */
 
@@ -175,7 +175,7 @@ function Window({
 
 /* -------------------------------------------------------------------- roof -- */
 
-const ROOF_OVERHANG_X = 0.45;
+const ROOF_OVERHANG_X = ROOF.eaveOverhangX;
 
 function useRoofGeometry() {
   return useMemo(() => {

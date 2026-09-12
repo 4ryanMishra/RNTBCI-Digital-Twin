@@ -13,7 +13,7 @@ import { DEVICE_PLACEMENTS, GLOW_COLORS, type DevicePlacement } from '../three/l
 import { isDeviceActive } from '../types';
 
 const isOutdoor = (p: DevicePlacement) =>
-  /outside|exterior/i.test(p.room);
+  /outside|exterior|roof/i.test(p.room);
 
 export function DeviceList() {
   const devices = useTwinStore((s) => s.devices);
@@ -57,7 +57,7 @@ export function DeviceList() {
       <ul>
         {DEVICE_PLACEMENTS.map((p) => {
           const d = devices[p.id];
-          const on = d ? isDeviceActive(d) : false;
+          const on = p.type === 'solar_panel' ? (d?.generationWatts ?? 0) > 5 : d ? isDeviceActive(d) : false;
           return (
             <li key={p.id}>
               <button
@@ -73,7 +73,11 @@ export function DeviceList() {
                   }}
                 />
                 <span className="dl-name">{p.label}</span>
-                <span className="dl-state">{d ? Math.round(d.powerWatts) : 0} W</span>
+                <span className="dl-state">
+                  {p.type === 'solar_panel'
+                    ? `+${Math.round(d?.generationWatts ?? 0)} W`
+                    : `${d ? Math.round(d.powerWatts) : 0} W`}
+                </span>
               </button>
             </li>
           );

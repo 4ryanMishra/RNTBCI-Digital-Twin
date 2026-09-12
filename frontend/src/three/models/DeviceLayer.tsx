@@ -24,6 +24,7 @@ import {
   DEVICE_PLACEMENTS,
   EVSE_TAPER_COLOR,
   GLOW_COLORS,
+  ROOF_SLOPE_ANGLE,
   type DevicePlacement,
 } from '../layout';
 
@@ -217,6 +218,41 @@ function EvseGlowOnly({ state }: { state: DeviceState }) {
   );
 }
 
+/**
+ * Roof-mounted PV array (device_registry.py: solar_panel_01, "generation"
+ * behaviour — negative power draw, no manual control). Glow is keyed off
+ * actual generation, not operationalState, since the panel is always
+ * "running" but only produces power between sunrise and sunset.
+ */
+function SolarArray({ state }: { state: DeviceState }) {
+  const generating = (state.generationWatts ?? 0) > 5;
+  return (
+    <group rotation={[-ROOF_SLOPE_ANGLE, 0, 0]}>
+      <mesh position={[0, 0, 0.02]} castShadow receiveShadow>
+        <boxGeometry args={[2.6, 0.05, 1.6]} />
+        <meshStandardMaterial color="#20242c" metalness={0.3} roughness={0.6} />
+      </mesh>
+      {Array.from({ length: 6 }).map((_, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        return (
+          <mesh key={i} position={[-0.85 + col * 0.85, 0.035, -0.35 + row * 0.7]}>
+            <boxGeometry args={[0.78, 0.02, 0.6]} />
+            <meshStandardMaterial
+              color={generating ? '#16407a' : '#12151c'}
+              emissive={generating ? GLOW_COLORS.solar_panel : '#000'}
+              emissiveIntensity={generating ? 0.5 : 0}
+              metalness={0.6}
+              roughness={0.25}
+            />
+          </mesh>
+        );
+      })}
+      <DeviceGlow type="solar_panel" active={generating} intensity={2.5} distance={3} position={[0, 0.3, 0]} />
+    </group>
+  );
+}
+
 function DeviceModel({ state }: { state: DeviceState }) {
   switch (state.deviceType) {
     case 'refrigerator':
@@ -237,6 +273,8 @@ function DeviceModel({ state }: { state: DeviceState }) {
       return <Microwave state={state} />;
     case 'evse':
       return <EvseGlowOnly state={state} />;
+    case 'solar_panel':
+      return <SolarArray state={state} />;
     default:
       return null;
   }
@@ -268,7 +306,7 @@ function SelectableDevice({ placement, state }: { placement: DevicePlacement; st
   const groundY = -placement.position[1]; // world floor in local space
   const showRing = selected || hovered;
   // wall/roof-mounted devices read better without a floor ring
-  const ringOk = placement.type !== 'cctv' && placement.type !== 'evse';
+  const ringOk = !['cctv', 'evse', 'solar_panel'].includes(placement.type);
 
   return (
     <group

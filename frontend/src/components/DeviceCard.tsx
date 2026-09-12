@@ -260,6 +260,19 @@ function Controls({ d }: { d: DeviceState }) {
         </>
       );
 
+    case 'solar_panel':
+      return (
+        <>
+          <Row label="Generating">
+            <span className="dc-readout">{Math.round(d.generationWatts ?? 0)} W</span>
+          </Row>
+          <p className="dc-note">
+            Roof-mounted PV array — no manual control. Output follows daylight hours and
+            subtracts from the household's net draw.
+          </p>
+        </>
+      );
+
     // dishwasher, washing_machine
     default:
       return (
@@ -317,10 +330,16 @@ export function DeviceCard() {
       </div>
 
       <div className="dc-power">
-        {device.powerWatts >= 1000
-          ? `${(device.powerWatts / 1000).toFixed(2)} kW`
-          : `${Math.round(device.powerWatts)} W`}{' '}
-        drawn now
+        {device.deviceType === 'solar_panel' ? (
+          <>{Math.round(device.generationWatts ?? 0)} W generating now</>
+        ) : (
+          <>
+            {Math.abs(device.powerWatts) >= 1000
+              ? `${(device.powerWatts / 1000).toFixed(2)} kW`
+              : `${Math.round(device.powerWatts)} W`}{' '}
+            drawn now
+          </>
+        )}
       </div>
 
       <div className="dc-body">

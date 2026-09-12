@@ -30,6 +30,7 @@ import csv
 import io
 import json
 import math
+import os
 import random
 import time
 from contextlib import asynccontextmanager
@@ -51,6 +52,31 @@ def _now() -> str:
 
 def _ts_ago(seconds: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat()
+
+
+def _solar_generation_watts() -> float:
+    """
+    Bell-curve PV output between sunrise_h and sunset_h, peaking at solar noon.
+    Uses local wall-clock time — this mirrors what the real backend does, so a
+    demo run at night correctly shows 0 W (a real panel doesn't generate either).
+
+    For demoing outside daylight hours, set MOCK_SOLAR_HOUR (e.g. `12` for
+    solar noon) before starting the server to override the clock.
+    """
+    panel = _DEVICES.get("solar_panel_01")
+    if not panel:
+        return 0.0
+    override = os.environ.get("MOCK_SOLAR_HOUR")
+    if override is not None:
+        hour = float(override)
+    else:
+        now = datetime.now()
+        hour = now.hour + now.minute / 60.0 + now.second / 3600.0
+    sunrise, sunset = panel["sunrise_h"], panel["sunset_h"]
+    if not (sunrise <= hour <= sunset):
+        return 0.0
+    frac = (hour - sunrise) / (sunset - sunrise)
+    return panel["rated_peak_watts"] * math.sin(math.pi * frac)
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +166,15 @@ _DEVICES: Dict[str, Dict[str, Any]] = {
         "cycle_off_duration_seconds": 300,
         "door_open": False,
     },
+    "solar_panel_01": {
+        "device_id": "solar_panel_01",
+        "device_type": "solar_panel",
+        "operational_state": "running",   # always-on; output follows daylight
+        "power_watts": 0.0,               # negative while generating (see device_registry.py)
+        "rated_peak_watts": 3000.0,
+        "sunrise_h": 6.0,
+        "sunset_h": 20.0,
+    },
 }
 
 # Rated powers used when turning devices on (W)
@@ -153,6 +188,7 @@ _RATED_POWER: Dict[str, float] = {
     "microwave_01":     1200.0,
     "refrigerator_01":   150.0,
     "evse_01":          7000.0,
+    "solar_panel_01":   3000.0,
 }
 
 # System config (villa tier)
@@ -309,15 +345,25 @@ async def _simulation_loop() -> None:
                     },
                 })
 
+        # --- Solar PV generation (device_registry.py: solar_panel_01) ---
+        if "solar_panel_01" in _DEVICES:
+            generation = _solar_generation_watts()
+            _DEVICES["solar_panel_01"]["power_watts"] = -round(generation, 1)
+
         # --- power_reading every 2 ticks ---
         if tick % 2 == 0 and _SYSTEM_CONFIG["configured"]:
+            solar_generation = -_DEVICES.get("solar_panel_01", {}).get("power_watts", 0.0)
             total = sum(
                 d.get("power_watts", d.get("current_power_watts", 0.0))
-                for d in _DEVICES.values()
+                for did, d in _DEVICES.items()
+                if did != "solar_panel_01"
             )
+            net = total - solar_generation
             limit_kva = _SYSTEM_CONFIG["contracted_power_kva"] or 9.2
             limit_w = limit_kva * 1000.0
-            ratio = total / limit_w
+            # Decision A note in device_registry.py: alert thresholds key off
+            # net draw (total - solar generation), not gross draw.
+            ratio = net / limit_w
 
             bstatus = "ok"
             if ratio >= 0.95:
@@ -330,6 +376,8 @@ async def _simulation_loop() -> None:
                 "timestamp": _now(),
                 "data": {
                     "totalDrawWatts": round(total, 1),
+                    "solarGenerationWatts": round(solar_generation, 1),
+                    "netDrawWatts": round(net, 1),
                     "limitWatts": round(limit_w, 1),
                     "status": bstatus,
                     "perDevice": [
@@ -348,16 +396,16 @@ async def _simulation_loop() -> None:
             if ratio >= 0.95 and (not _ALERTS or _ALERTS[-1]["severity"] != "critical"):
                 await _emit_alert(
                     "critical",
-                    f"Household load {round(total/1000,2)} kW exceeds 95% of "
+                    f"Household net load {round(net/1000,2)} kW exceeds 95% of "
                     f"{round(limit_w/1000,2)} kW limit. Reduce load manually.",
-                    total, limit_w,
+                    net, limit_w,
                 )
             elif 0.80 <= ratio < 0.95 and (not _ALERTS or _ALERTS[-1]["severity"] == "ok"):
                 await _emit_alert(
                     "warning",
-                    f"Household load {round(total/1000,2)} kW at 80%+ of "
+                    f"Household net load {round(net/1000,2)} kW at 80%+ of "
                     f"{round(limit_w/1000,2)} kW limit.",
-                    total, limit_w,
+                    net, limit_w,
                 )
 
 
@@ -458,16 +506,21 @@ async def setup_system(body: SetupRequest):
 @app.get("/api/v1/system/power-budget")
 def power_budget():
     _require_setup()
+    solar_generation = -_DEVICES.get("solar_panel_01", {}).get("power_watts", 0.0)
     total = sum(
         d.get("power_watts", d.get("current_power_watts", 0.0))
-        for d in _DEVICES.values()
+        for did, d in _DEVICES.items()
+        if did != "solar_panel_01"
     )
+    net = total - solar_generation
     limit_kva = _SYSTEM_CONFIG["contracted_power_kva"]
     limit_w = limit_kva * 1000.0
-    ratio = total / limit_w if limit_w else 0
+    ratio = net / limit_w if limit_w else 0
     bstatus = "critical" if ratio >= 0.95 else "warning" if ratio >= 0.80 else "ok"
     return {
         "totalDrawWatts": round(total, 1),
+        "solarGenerationWatts": round(solar_generation, 1),
+        "netDrawWatts": round(net, 1),
         "limitWatts": round(limit_w, 1),
         "status": bstatus,
         "utilisationPct": round(ratio * 100, 1),
@@ -934,6 +987,13 @@ async def control_device(device_id: str, body: ControlRequest):
                 "Valid: set_mode, set_temperature"
             )
 
+    # -----------------------------------------------------------------------
+    # SOLAR PANEL — no manual control (device_registry.py: "generation" type).
+    # Output is computed each tick from time-of-day; there is nothing to send.
+    # -----------------------------------------------------------------------
+    elif dtype == "solar_panel":
+        raise HTTPException(400, "Solar array has no manual controls — output follows daylight hours.")
+
     await _emit_state_change(device_id)
     return _matter_envelope(d)
 
@@ -993,6 +1053,7 @@ async def control_device(device_id: str, body: ControlRequest):
 _SUPPORTED_DEVICE_TYPES = {
     "evse", "light", "dishwasher", "washing_machine",
     "water_heater", "heat_pump", "cctv", "microwave", "refrigerator",
+    "solar_panel",
 }
 
 
@@ -1092,13 +1153,19 @@ def location():
 @app.get("/api/v1/modules/power/summary")
 def power_summary():
     _require_setup()
+    solar_generation = -_DEVICES.get("solar_panel_01", {}).get("power_watts", 0.0)
     total = sum(
-        d.get("power_watts", d.get("current_power_watts", 0.0)) for d in _DEVICES.values()
+        d.get("power_watts", d.get("current_power_watts", 0.0))
+        for did, d in _DEVICES.items()
+        if did != "solar_panel_01"
     )
+    net = total - solar_generation
     limit_w = (_SYSTEM_CONFIG["contracted_power_kva"] or 9.2) * 1000.0
-    ratio = total / limit_w if limit_w else 0
+    ratio = net / limit_w if limit_w else 0
     return {
         "totalWatts": round(total, 1),
+        "solarGenerationWatts": round(solar_generation, 1),
+        "netWatts": round(net, 1),
         "limitWatts": round(limit_w, 1),
         "budgetStatus": "critical" if ratio >= 0.95 else "warning" if ratio >= 0.80 else "ok",
         "utilisationPct": round(ratio * 100, 1),
@@ -1111,6 +1178,7 @@ def power_summary():
             }
             for did, d in _DEVICES.items()
         ],
+        "timestamp": _now(),
     }
 
 
